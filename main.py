@@ -15,13 +15,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# YouTube API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 DEVELOPER_KEY = "AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM"
 youtube = googleapiclient.discovery.build(API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY)
 
-# Telegram bot tokeni
 TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"
 
 def clean_title(title: str) -> str:
@@ -31,14 +29,12 @@ def clean_title(title: str) -> str:
     else:
         artist, song = "", title
 
-    # Keraksiz qismlarni olib tashlash
     song = re.sub(r'\s*\|.*$', '', song)
     song = re.sub(r'\s*Video Clip.*$', '', song, flags=re.IGNORECASE)
     song = re.sub(r'■.*$', '', song)
     song = re.sub(r'\s*\(.*?\)', '', song)
     song = re.sub(r'\s+', ' ', song).strip()
 
-    # HTML belgilarni tozalash
     song = html.unescape(song).replace("'", "'")
     artist = html.unescape(artist).replace("'", "'")
 
@@ -85,7 +81,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     query_text = update.message.text
     await update.message.reply_text("🔎 Qidirilmoqda, biroz kuting...")
 
-    # YouTube API orqali qidiruv
     try:
         request = youtube.search().list(
             part="snippet",
@@ -103,7 +98,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("❌ Hech narsa topilmadi. Boshqa so'rov yuborib ko'ring.")
         return
 
-    # Video ma'lumotlarini olish
     item = response["items"][0]
     video_id = item["id"]["videoId"]
     title = clean_title(item["snippet"]["title"])
@@ -111,7 +105,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.reply_text(f"⬇️ Yuklanmoqda: {title}")
 
-    # Audio yuklab olish
     if await download_audio(video_id, filename):
         try:
             async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
@@ -142,7 +135,6 @@ def main() -> None:
     try:
         application = Application.builder().token(TOKEN).build()
 
-        # Handler'larni qo'shish
         application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
         application.add_error_handler(error_handler)
