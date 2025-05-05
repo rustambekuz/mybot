@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Deezer API sozlamalari (RapidAPI orqali)
-DEEZER_API_URL = "https://deezer-public-api.p.rapidapi.com/search/tracks"  # To'g'ri endpoint
+DEEZER_API_URL = "https://www.deezer.com/track/3026858201"  # To'g'ri endpoint
 RAPIDAPI_KEY = "cc1b311428msh8e7eac8a9647690p1aea34jsnb448080c73a6"  # RapidAPI'dan olingan API Key'ni bu yerga qo'ying
 RAPIDAPI_HOST = "deezer-public-api.p.rapidapi.com"
 
