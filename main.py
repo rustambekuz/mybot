@@ -12,17 +12,26 @@ import googleapiclient.discovery
 import yt_dlp
 from uuid import uuid4
 
+# Logging sozlamalari
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('bot.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
+# YouTube API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 DEVELOPER_KEY = "AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM"
-youtube = googleapiclient.discovery.build(API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY)
+youtube = googleapiclient.discovery.build(
+    API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY, cache_discovery=False
+)
 
+# Telegram bot tokeni
 TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"
 
 def clean_title(title: str) -> tuple[str, str]:
@@ -60,7 +69,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
         "Qo'shiq nomini yuboring, masalan: Hamdam Sobirov - Tentakcham\n"
-        "iltimos, qo'shiqchining izlayotganda imlo xatoga yo'l qo'ymang!"
+        "Iltimos, qo'shiqchi ismini to'g'ri yozing!"
     )
 
 async def download_audio(video_id: str, filename: str) -> bool:
@@ -139,7 +148,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             logger.error(f"Audio yuborishda xato: {e}")
             await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
         finally:
-            # Faylni tozalash
             if os.path.exists(f"{filename}.mp3"):
                 os.remove(f"{filename}.mp3")
     else:
@@ -171,29 +179,55 @@ def terminate_other_instances() -> None:
     current_pid = os.getpid()
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
-            if proc.pid != current_pid and 'python' in proc.name().lower() and 'music_bot.py' in ' '.join(proc.cmdline()):
+            cmdline = ' '.join(proc.cmdline())
+            if proc.pid != current_pid and 'python' in proc.name().lower() and 'music_bot.py' in cmdline:
                 logger.info(f"Eski bot jarayoni aniqlandi (PID: {proc.pid}), to'xtatilmoqda...")
                 proc.send_signal(signal.SIGTERM)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                proc.wait(timeout=3)  # Jarayon to'xtashini kutish
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
             continue
 
 async def main() -> None:
     """Botni ishga tushirish"""
+    global application
     try:
+        # Eski jarayonlarni tozalash
         terminate_other_instances()
 
+        # Application yaratish
         application = Application.builder().token(TOKEN).build()
 
+        # Webhookni o'chirish
         await clear_webhook(application)
 
+        # Handler'larni qo'shish
         application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
         application.add_error_handler(error_handler)
 
         logger.info("Bot ishga tushdi...")
-        await application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+        # Pollingni boshlash
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+        # Botni to'xtatishni kutish
+        while True:
+            await asyncio.sleep(3600)  # Bot doimiy ishlashi uchun
+
     except Exception as e:
         logger.error(f"Botni ishga tushirishda xato: {e}")
+    finally:
+        # Botni to'g'ri to'xtatish
+        if 'application' in locals():
+            await application.stop()
+            await application.shutdown()
+            logger.info("Bot muvaffaqiyatli to'xtatildi.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        logger.error(f"Event loop xatosi: {e}")
+        raise
