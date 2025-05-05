@@ -84,6 +84,7 @@ screen-resolution-extra==0.0.0
 setuptools==68.1.2
 six==1.16.0
 sniffio==1.3.1
+sqlparse==0.5.3
 systemd-python==235
 trash-cli==0.23.11.10
 typing_extensions==4.10.0
