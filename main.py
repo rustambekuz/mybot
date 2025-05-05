@@ -127,7 +127,7 @@ def main():
         application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
         print("Bot ishga tushdi...")
-        application.run_polling()
+        application.run_polling()  # Buning ustidan hech kim boshqa o‘tmasligi uchun faqat bitta chaqiruv
     except Exception as e:
         logging.error(f"Main function error: {e}")
 
