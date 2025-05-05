@@ -15,8 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-api_service_name = "youtube"
-api_version = "v3"
+# YouTube API sozlamalari
+API_SERVICE_NAME = "youtube"
+API_VERSION = "v3"
 DEVELOPER_KEY = "AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM"
 youtube = googleapiclient.discovery.build(api_service_name, api_version, developerKey=DEVELOPER_KEY)
 
