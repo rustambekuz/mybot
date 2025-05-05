@@ -24,9 +24,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Deezer API sozlamalari (RapidAPI orqali)
-DEEZER_API_URL = "https://www.deezer.com/track/3026858201"  # To'g'ri endpoint
+DEEZER_API_URL = "https://deezer-public-api.p.rapidapi.com/search"
 RAPIDAPI_KEY = "cc1b311428msh8e7eac8a9647690p1aea34jsnb448080c73a6"  # RapidAPI'dan olingan API Key'ni bu yerga qo'ying
-RAPIDAPI_HOST = "deezer-public-api.p.rapidapi.com"
+RAPIDAPI_HOST = "deezer-downloader1.p.rapidapi.com"
 
 # Telegram bot tokeni
 TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"
@@ -73,14 +73,12 @@ async def download_audio(download_url: str, filename: str) -> bool:
                 f.write(chunk)
         logger.info(f"Vaqtinchalik fayl saqlandi: {temp_file}")
 
-        # Sifatni tekshirish va konvertatsiya (agar kerak bo'lsa)
         output_file = f"{filename}_converted.mp3"
         stream = ffmpeg.input(temp_file)
         stream = ffmpeg.output(stream, output_file, format='mp3', acodec='mp3', ab='192k')
         ffmpeg.run(stream)
         logger.info(f"Fayl MP3 ga o'zgartirildi: {output_file}")
 
-        # Vaqtinchalik faylni o'chirish va asl nomga o'zgartirish
         if os.path.exists(temp_file):
             os.remove(temp_file)
             logger.info(f"Vaqtinchalik fayl o'chirildi: {temp_file}")
@@ -106,7 +104,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text("🔎 Qidirilmoqda, biroz kuting...")
 
     try:
-        # Deezer API orqali qidiruv (RapidAPI orqali)
         headers = {
             "X-RapidAPI-Key": RAPIDAPI_KEY,
             "X-RapidAPI-Host": RAPIDAPI_HOST
@@ -116,12 +113,18 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "limit": 1
         }
         response = requests.get(DEEZER_API_URL, headers=headers, params=params)
+        logger.info(f"API javobi: {response.text[:500]}")  # Javobning boshini log qilish
         if response.status_code != 200:
             logger.error(f"Deezer API xatosi: HTTP {response.status_code}")
             await update.message.reply_text(f"❌ Deezer API xatosi: HTTP {response.status_code}. Keyinroq urinib ko'ring.")
             return
 
         data = response.json()
+        if not data or 'data' not in data:
+            logger.error(f"API javobi noto'g'ri formatda: {data}")
+            await update.message.reply_text("❌ Deezer API'dan noto'g'ri javob keldi. Keyinroq urinib ko'ring.")
+            return
+
         results = data.get('data', [])
         if not results:
             await update.message.reply_text("❌ Hech narsa topilmadi. Boshqa so'rov yuborib ko'ring.")
