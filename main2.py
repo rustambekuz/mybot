@@ -1,6 +1,6 @@
 import requests
-import json
 import logging
+import json
 
 # Logging sozlamalari
 logging.basicConfig(
@@ -12,54 +12,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Spotify API sozlamalari (RapidAPI orqali)
-SPOTIFY_API_URL = "https://spotify23.p.rapidapi.com/track_lyrics/"
+# API sozlamalari (RapidAPI orqali)
+API_URL = "https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink"
 RAPIDAPI_KEY = "cc1b311428msh8e7eac8a9647690p1aea34jsnb448080c73a6"
-RAPIDAPI_HOST = "spotify23.p.rapidapi.com"
+RAPIDAPI_HOST = "auto-download-all-in-one.p.rapidapi.com"
 
-def get_lyrics(track_id: str) -> str:
-    """Spotify API'dan qo'shiq matnini olish"""
+def download_tiktok_video(url: str) -> str:
+    """TikTok videoni RapidAPI orqali yuklab olish"""
     headers = {
         "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": RAPIDAPI_HOST
+        "X-RapidAPI-Host": RAPIDAPI_HOST,
+        "Content-Type": "application/json"
     }
-    params = {
-        "id": track_id
+    payload = {
+        "url": url
     }
 
     try:
-        response = requests.get(SPOTIFY_API_URL, headers=headers, params=params)
-        logger.info(f"API so'rovi yuborildi: {SPOTIFY_API_URL}?id={track_id}")
+        logger.info(f"API so'rovi yuborildi: {API_URL} bilan {json.dumps(payload)}")
+        response = requests.post(API_URL, headers=headers, json=payload)
         logger.info(f"API javobi: {response.status_code} - {response.text[:500]}")
 
         if response.status_code != 200:
-            logger.error(f"Spotify API xatosi: HTTP {response.status_code}")
-            return f"❌ Spotify API xatosi: HTTP {response.status_code}. Keyinroq urinib ko'ring."
+            logger.error(f"API xatosi: HTTP {response.status_code}")
+            return f"❌ API xatosi: HTTP {response.status_code}. Keyinroq urinib ko'ring."
 
         data = response.json()
-        if not data or 'lyrics' not in data:
+        if not data or 'download_url' not in data:
             logger.error(f"API javobi noto'g'ri formatda: {data}")
-            return "❌ Spotify API'dan noto'g'ri javob keldi. Keyinroq urinib ko'ring."
+            return "❌ Yuklab olish URL'i topilmadi. API javobi noto'g'ri."
 
-        lyrics_data = data.get('lyrics', {})
-        lines = lyrics_data.get('lines', [])
-        if not lines:
-            return "❌ Bu qo'shiq uchun lyrics topilmadi."
+        download_url = data.get('download_url')
+        return download_url if download_url else "❌ Yuklab olish URL'i mavjud emas."
 
-        # Lyrics matnini formatlash
-        lyrics_text = "\n".join(line.get('words', '') for line in lines if line.get('words'))
-        return lyrics_text if lyrics_text else "❌ Lyrics bo'sh yoki mavjud emas."
-
+    except requests.exceptions.RequestException as e:
+        logger.error(f"So'rovda xato: {e}")
+        return f"❌ So'rovda muammo yuz berdi: {str(e)}. Internetni tekshiring."
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing xatosi: {e}")
+        return "❌ API javobi noto'g'ri formatda. Keyinroq urinib ko'ring."
     except Exception as e:
-        logger.error(f"Spotify qidiruvida xato: {e}")
-        return f"❌ Spotify bilan muammo yuz berdi: {str(e)}. Keyinroq urinib ko'ring."
+        logger.error(f"Kutilmagan xato: {e}")
+        return f"❌ Noma'lum xato: {str(e)}. Keyinroq urinib ko'ring."
 
 def main():
-    """Asosiy funksiya: Qo'shiq ID'sini kiriting va lyrics oling"""
-    track_id = "4snRyiaLyvTMui0hzp8MF7"  # Foydalanuvchi kiritgan qo'shiq ID'si
-    lyrics = get_lyrics(track_id)
-    print(f"🎵 Qo'shiq matni (Track ID: {track_id}):\n")
-    print(lyrics)
+    """Asosiy funksiya: TikTok video URL'sini kiriting va yuklab olish linkini oling"""
+    tiktok_url = "https://www.tiktok.com/@yeuphimzz/video/7237370304337628442"
+    download_link = download_tiktok_video(tiktok_url)
+    print(f"📥 TikTok video yuklab olish linki:\n{download_link}")
 
 if __name__ == "__main__":
     main()
