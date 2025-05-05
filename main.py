@@ -5,7 +5,7 @@ import html
 import aiofiles
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, Text
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -143,7 +143,7 @@ async def start_command(message: types.Message):
         "Iltimos, qo'shiqchi ismini to'g'ri yozing!"
     )
 
-@dp.message(Text())
+@dp.message(content_types=types.ContentType.TEXT)
 async def search_music(message: types.Message, state: FSMContext):
     """Search and send music based on user query"""
     query_text = message.text
