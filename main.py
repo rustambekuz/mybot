@@ -6,8 +6,8 @@ import aiofiles
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import googleapiclient.discovery
-import html
-import yt_dlp as youtube_dl
+import yt_dlp
+from uuid import uuid4
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
