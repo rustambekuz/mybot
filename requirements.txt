@@ -51,7 +51,6 @@ netaddr==0.8.0
 netifaces==0.11.0
 oauthlib==3.2.2
 olefile==0.46
-onboard==1.4.1
 paramiko==2.12.0
 pexpect==4.9.0
 pillow==10.2.0
