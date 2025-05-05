@@ -122,7 +122,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Xatolik yuz berdi.")
 
 def main():
-    # Faqat bir marta run_polling() chaqiladi
     try:
         application = Application.builder().token(TOKEN).build()
         application.add_handler(CommandHandler("start", start))
