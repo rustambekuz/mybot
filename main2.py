@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Deezer API sozlamalari (RapidAPI orqali)
-DEEZER_API_URL = "https://deezer-public-api.p.rapidapi.com/search"
+DEEZER_API_URL = "deezr-downloader.p.rapidapi.com"  # To'g'ri endpoint
 RAPIDAPI_KEY = "cc1b311428msh8e7eac8a9647690p1aea34jsnb448080c73a6"  # RapidAPI'dan olingan API Key'ni bu yerga qo'ying
 RAPIDAPI_HOST = "deezer-public-api.p.rapidapi.com"
 
@@ -118,7 +118,7 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         response = requests.get(DEEZER_API_URL, headers=headers, params=params)
         if response.status_code != 200:
             logger.error(f"Deezer API xatosi: HTTP {response.status_code}")
-            await update.message.reply_text("❌ Deezer bilan muammo yuz berdi. Keyinroq urinib ko'ring.")
+            await update.message.reply_text(f"❌ Deezer API xatosi: HTTP {response.status_code}. Keyinroq urinib ko'ring.")
             return
 
         data = response.json()
@@ -231,7 +231,6 @@ def terminate_other_instances() -> None:
 
 async def main() -> None:
     """Botni ishga tushirish"""
-    global application
     try:
         logger.info("Eski bot jarayonlarini tozalash...")
         terminate_other_instances()
