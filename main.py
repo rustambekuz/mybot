@@ -46,7 +46,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
         "Qo'shiq nomini yuboring, masalan: Hamdam Sobirov - Tentakcham\n"
-        "Men uni YouTube'dan topib, audio sifatida yuboraman!"
+        "iltimos, qo'shiqchining izlayotganda imlo xatoga yo'l qo'ymang!"
+
     )
 
 async def download_audio(video_id: str, filename: str) -> bool:
