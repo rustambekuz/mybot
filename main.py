@@ -46,7 +46,7 @@ def clean_title(title: str) -> tuple[str, str]:
     song = re.sub(r'\s*\|.*$', '', song)
     song = re.sub(r'\s*Video Clip.*$', '', song, flags=re.IGNORECASE)
     song = re.sub(r'■.*$', '', song)
-    song = re.sub(r'\s*\[.*?\]', '', song)
+    song = re.sub(r'\s*\[.*?]', '', song)
     song = re.sub(r'\s+', ' ', song).strip()
 
     artist = re.sub(r'\s+', ' ', artist).strip()
@@ -177,14 +177,20 @@ async def clear_webhook(application: Application) -> None:
 def terminate_other_instances() -> None:
     """Boshqa bot jarayonlarini to'xtatish"""
     current_pid = os.getpid()
+    bot_token = TOKEN.split(':')[0]  # Tokenning birinchi qismi (bot ID)
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = ' '.join(proc.cmdline())
-            if proc.pid != current_pid and 'python' in proc.name().lower() and 'music_bot.py' in cmdline:
+            # Bot jarayonini aniqlash uchun token va fayl nomini tekshirish
+            if (proc.pid != current_pid and
+                    'python' in proc.name().lower() and
+                    ('music_bot.py' in cmdline or 'main.py' in cmdline) and
+                    bot_token in cmdline):
                 logger.info(f"Eski bot jarayoni aniqlandi (PID: {proc.pid}), to'xtatilmoqda...")
                 proc.send_signal(signal.SIGTERM)
-                proc.wait(timeout=3)  # Jarayon to'xtashini kutish
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                proc.wait(timeout=5)  # Jarayon to'xtashini 5 soniya kutish
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+            logger.warning(f"Jarayon to'xtatishda xato (PID: {proc.pid}): {e}")
             continue
 
 async def main() -> None:
@@ -192,6 +198,7 @@ async def main() -> None:
     global application
     try:
         # Eski jarayonlarni tozalash
+        logger.info("Eski bot jarayonlarini tozalash...")
         terminate_other_instances()
 
         # Application yaratish
@@ -218,9 +225,11 @@ async def main() -> None:
 
     except Exception as e:
         logger.error(f"Botni ishga tushirishda xato: {e}")
+        raise
     finally:
         # Botni to'g'ri to'xtatish
         if 'application' in locals():
+            logger.info("Bot to'xtatilmoqda...")
             await application.stop()
             await application.shutdown()
             logger.info("Bot muvaffaqiyatli to'xtatildi.")
