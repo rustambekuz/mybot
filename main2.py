@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # API sozlamalari (RapidAPI orqali)
-MUSIC_API_URL = "https://baixar-musicas-mp3-completas.p.rapidapi.com/search"  # Taxminiy endpoint
+MUSIC_API_URL = "https://baixar-musicas-mp3-completas.p.rapidapi.com/download"  # Yangilangan endpoint
 RAPIDAPI_KEY = "cc1b311428msh8e7eac8a9647690p1aea34jsnb448080c73a6"
 RAPIDAPI_HOST = "baixar-musicas-mp3-completas.p.rapidapi.com"
 
@@ -26,7 +26,7 @@ RAPIDAPI_HOST = "baixar-musicas-mp3-completas.p.rapidapi.com"
 TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"
 
 async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Foydalanuvchi yuborgan so'rov bo'yicha musiqani qidirish"""
+    """Foydalanuvchi yuborgan so'rov bo'yicha musiqani qidirish va yuklab olish"""
     query_text = update.message.text
     await update.message.reply_text("🔎 Qidirilmoqda, biroz kuting...")
 
@@ -35,7 +35,7 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "X-RapidAPI-Host": RAPIDAPI_HOST
     }
     params = {
-        "query": query_text
+        "query": query_text  # API’ga qarab parametrlarni o‘zgartirish kerak bo‘lishi mumkin
     }
 
     try:
@@ -49,7 +49,7 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
 
         data = response.json()
-        if not data or 'results' not in data:
+        if not data or 'download_url' not in data:
             logger.error(f"API javobi noto'g'ri formatda: {data}")
             await update.message.reply_text("❌ API javobi noto'g'ri formatda. Keyinroq urinib ko'ring.")
             return
