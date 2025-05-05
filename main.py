@@ -1,6 +1,8 @@
 import os
 import re
 import logging
+import html
+import aiofiles
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import googleapiclient.discovery
