@@ -46,7 +46,7 @@ def clean_title(title: str) -> tuple[str, str]:
     song = re.sub(r'\s*\|.*$', '', song)
     song = re.sub(r'\s*Video Clip.*$', '', song, flags=re.IGNORECASE)
     song = re.sub(r'■.*$', '', song)
-    song = re.sub(r'\s*\[.*?]', '', song)
+    song = re.sub(r'\s*\[.*?\]', '', song)
     song = re.sub(r'\s+', ' ', song).strip()
 
     artist = re.sub(r'\s+', ' ', artist).strip()
@@ -163,6 +163,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "❌ Botda muammo: Bir nechta bot instansiyasi ishlamoqda. "
                 "Iltimos, serverda faqat bitta bot jarayoni ishlashiga ishonch hosil qiling."
             )
+    elif str(context.error).startswith("asyncio.CancelledError"):
+        logger.warning("asyncio.CancelledError aniqlandi, bu Application.stop orqali yopilgan bo'lishi mumkin.")
     elif update and update.message:
         await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
 
@@ -171,6 +173,9 @@ async def clear_webhook(application: Application) -> None:
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info("Webhook muvaffaqiyatli o'chirildi.")
+        # Qo'shimcha tasdiqlash uchun getWebhookInfo
+        webhook_info = await application.bot.get_webhook_info()
+        logger.info(f"Webhook holati: {webhook_info}")
     except Exception as e:
         logger.error(f"Webhook o'chirishda xato: {e}")
 
@@ -184,18 +189,21 @@ def terminate_other_instances() -> None:
             # Bot jarayonini aniqlash uchun token va fayl nomini tekshirish
             if (proc.pid != current_pid and
                     'python' in proc.name().lower() and
-                    ('music_bot.py' in cmdline or 'main.py' in cmdline) and
                     bot_token in cmdline):
-                logger.info(f"Eski bot jarayoni aniqlandi (PID: {proc.pid}), to'xtatilmoqda...")
-                proc.send_signal(signal.SIGTERM)
-                proc.wait(timeout=5)  # Jarayon to'xtashini 5 soniya kutish
+                logger.info(f"Eski bot jarayoni aniqlandi (PID: {proc.pid}, cmdline: {cmdline}), to'xtatilmoqda...")
+                try:
+                    proc.send_signal(signal.SIGTERM)
+                    proc.wait(timeout=5)  # Jarayon to'xtashini 5 soniya kutish
+                except psutil.TimeoutExpired:
+                    logger.warning(f"Jarayon (PID: {proc.pid}) SIGTERM bilan to'xtamadi, SIGKILL yuborilmoqda...")
+                    proc.send_signal(signal.SIGKILL)
+                    proc.wait(timeout=3)  # SIGKILLdan keyin 3 soniya kutish
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
             logger.warning(f"Jarayon to'xtatishda xato (PID: {proc.pid}): {e}")
             continue
 
 async def main() -> None:
     """Botni ishga tushirish"""
-    global application
     try:
         # Eski jarayonlarni tozalash
         logger.info("Eski bot jarayonlarini tozalash...")
@@ -217,7 +225,12 @@ async def main() -> None:
         # Pollingni boshlash
         await application.initialize()
         await application.start()
-        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        await application.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            poll_interval=1.0,
+            timeout=10
+        )
 
         # Botni to'xtatishni kutish
         while True:
