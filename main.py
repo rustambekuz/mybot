@@ -3,24 +3,41 @@ import re
 import logging
 import html
 import aiofiles
+import time
+import pkg_resources
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import googleapiclient.discovery
 import yt_dlp
 from uuid import uuid4
+from dotenv import load_dotenv
 
+# .env faylidan kalitlarni o‘qish
+load_dotenv()
+
+# Logging sozlash
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('bot.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
+# API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
-DEVELOPER_KEY = "AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM"
-youtube = googleapiclient.discovery.build(API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY)
+DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"
+# YouTube API ulanish
+try:
+    youtube = googleapiclient.discovery.build(API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY)
+except Exception as e:
+    logger.error(f"YouTube API ulanishda xato: {e}")
+    raise
 
 def clean_title(title: str) -> str:
     """YouTube video sarlavhasini tozalash"""
@@ -32,7 +49,7 @@ def clean_title(title: str) -> str:
     song = re.sub(r'\s*\|.*$', '', song)
     song = re.sub(r'\s*Video Clip.*$', '', song, flags=re.IGNORECASE)
     song = re.sub(r'■.*$', '', song)
-    song = re.sub(r'\s*\(.*?\)', '', song)
+    song = re.sub(r'\s*\.*?\)', '', song)
     song = re.sub(r'\s+', ' ', song).strip()
 
     song = html.unescape(song).replace("'", "'")
@@ -46,8 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
         "Qo'shiq nomini yuboring, masalan: Hamdam Sobirov - Tentakcham\n"
-        "iltimos, qo'shiqchining izlayotganda imlo xatoga yo'l qo'ymang!"
-
+        "Iltimos, xonanda nomini imlo xatosiz yozing!"
     )
 
 async def download_audio(video_id: str, filename: str) -> bool:
@@ -91,8 +107,8 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         response = request.execute()
     except Exception as e:
-        logger.error(f"API xatosi: {e}")
-        await update.message.reply_text("❌API bilan muammo yuz berdi. Keyinroq urinib ko'ring.")
+        logger.error(f"YouTube API xatosi: {e}")
+        await update.message.reply_text("❌ API bilan muammo yuz berdi. Keyinroq urinib ko'ring.")
         return
 
     if not response.get("items"):
@@ -119,7 +135,6 @@ async def search_music(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             logger.error(f"Audio yuborishda xato: {e}")
             await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
         finally:
-            # Faylni tozalash
             if os.path.exists(f"{filename}.mp3"):
                 os.remove(f"{filename}.mp3")
     else:
@@ -131,19 +146,59 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update and update.message:
         await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
 
+def verify_dependencies():
+    """Kerakli kutubxonalarni tekshirish"""
+    required_packages = ['python-telegram-bot', 'google-api-python-client', 'yt-dlp', 'aiofiles', 'python-dotenv']
+    missing = []
+    for package in required_packages:
+        try:
+            pkg_resources.require(package)
+        except pkg_resources.DistributionNotFound:
+            missing.append(package)
+    return missing
+
 def main() -> None:
     """Botni ishga tushirish"""
-    try:
-        application = Application.builder().token(TOKEN).build()
+    missing_packages = verify_dependencies()
+    if missing_packages:
+        logger.error(f"Quyidagi kutubxonalar o'rnatilmagan: {', '.join(missing_packages)}")
+        logger.error("Iltimos, ularni o'rnating: pip install -r requirements.txt")
+        return
 
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
-        application.add_error_handler(error_handler)
+    max_retries = 3
+    retry_count = 0
+    retry_delay = 5
 
-        logger.info("Bot ishga tushdi...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        logger.error(f"Botni ishga tushirishda xato: {e}")
+    while retry_count < max_retries:
+        try:
+            application = Application.builder().token(TOKEN).build()
+
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_music))
+            application.add_error_handler(error_handler)
+
+            logger.info("Bot ishga tushdi...")
+
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                timeout=30,
+                read_timeout=30,
+                write_timeout=30,
+                connect_timeout=30,
+                pool_timeout=30
+            )
+            break
+        except TimeoutError as e:
+            retry_count += 1
+            logger.error(f"Timeout xatosi ({retry_count}/{max_retries}): {e}")
+            if retry_count < max_retries:
+                logger.info(f"Qayta ulanish {retry_delay} soniyadan keyin...")
+                time.sleep(retry_delay)
+            else:
+                logger.error("Maksimal qayta ulanish soni tugadi")
+        except Exception as e:
+            logger.error(f"Botni ishga tushirishda xato: {str(e)}")
+            break
 
 if __name__ == "__main__":
     main()
