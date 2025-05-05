@@ -231,6 +231,7 @@ def terminate_other_instances() -> None:
 
 async def main() -> None:
     """Botni ishga tushirish"""
+    global application
     try:
         logger.info("Eski bot jarayonlarini tozalash...")
         terminate_other_instances()
