@@ -9,18 +9,15 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from yt_dlp import YoutubeDL
 import aiofiles
 
-# .env faylini yuklash
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Logging sozlamalari
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# /start komandasi uchun handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     welcome_text = (
@@ -34,8 +31,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
 
-# Audio yuklab olish funksiyasi
-async def download_audio(url: str, filename: str) -> tuple[bool, str, str]:
+async def download_audio(url: str, filename: str) -> tuple[bool, str]:
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'{filename}.%(ext)s',
@@ -46,33 +42,29 @@ async def download_audio(url: str, filename: str) -> tuple[bool, str, str]:
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'extract_flat': False,
-        'writeinfojson': True,
     }
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
             title = info_dict.get('title', 'Audio')
-            uploader = info_dict.get('uploader', 'Unknown Artist')
-        return True, title, uploader
+        return True, title
     except Exception as e:
         logger.error(f"Audio yuklashda xato: {e}")
-        return False, "", ""
+        return False, ""
 
-# Foydalanuvchi xabarini qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     url = update.message.text.strip()
     await update.message.reply_text("🔎 Yuklanmoqda, biroz kuting...")
 
     filename = f"audio_{uuid4().hex}"
-    success, title, uploader = await download_audio(url, filename)
+    success, title = await download_audio(url, filename)
     if success:
         try:
             async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
                 await update.message.reply_audio(
                     audio=await audio.read(),
-                    caption=f"🎵 {title}\n\n<i>Ijrochi:</i> {uploader}",
+                    caption=f"🎵 {title}",
                     title=title
                 )
         except Exception as e:
@@ -84,13 +76,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await update.message.reply_text("❌ Audio yuklashda xato yuz berdi.")
 
-# Xatoliklarni qayta ishlash
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(msg="Xatolik yuz berdi:", exc_info=context.error)
     if isinstance(update, Update) and update.message:
         await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
 
-# Botni ishga tushirish
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
