@@ -2,9 +2,9 @@ import os
 import re
 import logging
 import html
+import importlib
 import aiofiles
 import time
-import importlib
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import googleapiclient.discovery
@@ -12,10 +12,8 @@ import yt_dlp
 from uuid import uuid4
 from dotenv import load_dotenv
 
-# .env faylidan kalitlarni o‘qish
 load_dotenv()
 
-# Logging sozlash
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -26,18 +24,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Kalitlar mavjudligini tekshirish
 if not DEVELOPER_KEY or not TOKEN:
     logger.error("YOUTUBE_API_KEY yoki TELEGRAM_TOKEN .env faylida topilmadi!")
     raise ValueError("API kalitlari yoki token sozlanmagan!")
 
-# YouTube API ulanish
 try:
     youtube = googleapiclient.discovery.build(
         API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY, cache_discovery=False
@@ -155,12 +150,20 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def verify_dependencies():
     """Kerakli kutubxonalarni tekshirish"""
-    required_packages = ['python-telegram-bot', 'google-api-python-client', 'yt-dlp', 'aiofiles', 'python-dotenv']
+    required_packages = [
+        ('python-telegram-bot', 'telegram'),
+        ('google-api-python-client', 'googleapiclient'),
+        ('yt-dlp', 'yt_dlp'),
+        ('aiofiles', 'aiofiles'),
+        ('python-dotenv', 'dotenv')
+    ]
     missing = []
-    for package in required_packages:
+    for package, module in required_packages:
         try:
-            importlib.import_module(package.replace('-', '_'))
-        except ImportError:
+            importlib.import_module(module)
+            logger.info(f"{package} (modul: {module}) muvaffaqiyatli topildi")
+        except ImportError as e:
+            logger.error(f"{package} (modul: {module}) topilmadi: {e}")
             missing.append(package)
     return missing
 
