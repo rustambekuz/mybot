@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 # API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
-DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+DEVELOPER_KEY = os.getenv("AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM")
+TOKEN = os.getenv("7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4")
 
 # YouTube API ulanish
 try:
