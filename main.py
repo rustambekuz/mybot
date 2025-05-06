@@ -4,7 +4,7 @@ import logging
 import html
 import aiofiles
 import time
-import pkg_resources
+import importlib
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import googleapiclient.discovery
@@ -29,12 +29,19 @@ logger = logging.getLogger(__name__)
 # API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
-DEVELOPER_KEY = os.getenv("AIzaSyBpGD78aAuu69-GhK8VHcdhs9PSqNzWaVM")
-TOKEN = os.getenv("7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4")
+DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# Kalitlar mavjudligini tekshirish
+if not DEVELOPER_KEY or not TOKEN:
+    logger.error("YOUTUBE_API_KEY yoki TELEGRAM_TOKEN .env faylida topilmadi!")
+    raise ValueError("API kalitlari yoki token sozlanmagan!")
 
 # YouTube API ulanish
 try:
-    youtube = googleapiclient.discovery.build(API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY)
+    youtube = googleapiclient.discovery.build(
+        API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY, cache_discovery=False
+    )
 except Exception as e:
     logger.error(f"YouTube API ulanishda xato: {e}")
     raise
@@ -152,8 +159,8 @@ def verify_dependencies():
     missing = []
     for package in required_packages:
         try:
-            pkg_resources.require(package)
-        except pkg_resources.DistributionNotFound:
+            importlib.import_module(package.replace('-', '_'))
+        except ImportError:
             missing.append(package)
     return missing
 
