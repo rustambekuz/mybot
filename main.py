@@ -2,11 +2,13 @@ import os
 import logging
 import asyncio
 import aiofiles
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from yt_dlp import YoutubeDL
+from uuid import uuid4
 from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from yt_dlp import YoutubeDL
 
+# .env faylini yuklash
 load_dotenv()
 
 # Logging sozlamalari
@@ -16,25 +18,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Telegram tokeni
+# Telegram tokenini olish
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TOKEN:
     logger.error("TELEGRAM_TOKEN .env faylida topilmadi!")
-    raise ValueError("TELEGRAM_TOKEN sozlanmagan!")
+    raise ValueError("Bot tokeni sozlanmagan!")
 
-# /start komandasi
+# /start komandasi uchun handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "Salom! YouTube havolasini yuboring, men esa sizga audio faylini yuboraman."
+        "Salom! Menga YouTube havolasini yuboring, men esa sizga audio faylni yuboraman."
     )
 
 # Audio yuklab olish funksiyasi
-async def download_audio(url: str, filename: str) -> bool:
+async def download_audio(url: str, filename: str) -> tuple[bool, str]:
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'{filename}.%(ext)s',
         'quiet': True,
-        'cookiefile': 'cookies.txt',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -42,26 +43,33 @@ async def download_audio(url: str, filename: str) -> bool:
         }],
     }
 
+    # Agar cookies.txt fayli mavjud bo‘lsa, uni qo‘shish
+    if os.path.exists('cookies.txt'):
+        ydl_opts['cookiefile'] = 'cookies.txt'
+
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return True
+            info_dict = ydl.extract_info(url, download=True)
+            title = info_dict.get('title', 'Audio fayl')
+        return True, title
     except Exception as e:
         logger.error(f"Audio yuklashda xato: {e}")
-        return False
+        return False, ""
 
-# Xabarni qayta ishlash
+# Foydalanuvchi xabarlarini qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     url = update.message.text.strip()
     await update.message.reply_text("🔎 Yuklanmoqda, biroz kuting...")
 
-    filename = "audio_file"
-    if await download_audio(url, filename):
+    filename = f"audio_{uuid4().hex}"
+    success, title = await download_audio(url, filename)
+    if success:
         try:
             async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
                 await update.message.reply_audio(
                     audio=await audio.read(),
-                    caption="🎵 Mana sizning audio faylingiz"
+                    caption=f"🎵 {title}",
+                    title=title
                 )
         except Exception as e:
             logger.error(f"Audio yuborishda xato: {e}")
@@ -72,12 +80,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await update.message.reply_text("❌ Audio yuklashda xato yuz berdi.")
 
+# Xatolarni qayta ishlash
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error(f"Xato yuz berdi: {context.error}")
+    if isinstance(update, Update) and update.message:
+        await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko‘ring.")
+
 # Botni ishga tushirish
-def main():
+def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_error_handler(error_handler)
 
     logger.info("Bot ishga tushdi...")
     application.run_polling()
