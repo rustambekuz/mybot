@@ -1,15 +1,17 @@
 import os
 import logging
 import asyncio
-import aiofiles
 from uuid import uuid4
 from dotenv import load_dotenv
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from yt_dlp import YoutubeDL
+import aiofiles
 
 # .env faylini yuklash
 load_dotenv()
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # Logging sozlamalari
 logging.basicConfig(
@@ -18,57 +20,59 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Telegram tokenini olish
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-if not TOKEN:
-    logger.error("TELEGRAM_TOKEN .env faylida topilmadi!")
-    raise ValueError("Bot tokeni sozlanmagan!")
-
 # /start komandasi uchun handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "Salom! Menga YouTube havolasini yuboring, men esa sizga audio faylni yuboraman."
+    user = update.effective_user
+    welcome_text = (
+        f"<b>🎧 Salom, {user.first_name}!</b>\n\n"
+        "Men sizga <b>YouTube</b> va <b>Instagram</b> havolalaridan audio fayllarni yuklab beraman.\n"
+        "Iltimos, quyidagi ko'rsatmalarga rioya qiling:\n"
+        "1️⃣ Yuklab olishni istagan <b>video havolasini</b> yuboring.\n"
+        "2️⃣ Men sizga audio faylni yuboraman.\n\n"
+        "🎶 <i>Masalan:</i> https://www.youtube.com/watch?v=abc123 yoki https://www.instagram.com/reel/xyz456\n\n"
+        "Agar savollaringiz bo'lsa, bemalol so'rang!"
     )
+    await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
 
 # Audio yuklab olish funksiyasi
-async def download_audio(url: str, filename: str) -> tuple[bool, str]:
+async def download_audio(url: str, filename: str) -> tuple[bool, str, str]:
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': f'{filename}.%(ext)s',
         'quiet': True,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'extract_flat': False,
+        'writeinfojson': True,
     }
-
-    # Agar cookies.txt fayli mavjud bo‘lsa, uni qo‘shish
-    if os.path.exists('cookies.txt'):
-        ydl_opts['cookiefile'] = 'cookies.txt'
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
-            title = info_dict.get('title', 'Audio fayl')
-        return True, title
+            title = info_dict.get('title', 'Audio')
+            uploader = info_dict.get('uploader', 'Unknown Artist')
+        return True, title, uploader
     except Exception as e:
         logger.error(f"Audio yuklashda xato: {e}")
-        return False, ""
+        return False, "", ""
 
-# Foydalanuvchi xabarlarini qayta ishlash
+# Foydalanuvchi xabarini qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     url = update.message.text.strip()
     await update.message.reply_text("🔎 Yuklanmoqda, biroz kuting...")
 
     filename = f"audio_{uuid4().hex}"
-    success, title = await download_audio(url, filename)
+    success, title, uploader = await download_audio(url, filename)
     if success:
         try:
             async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
                 await update.message.reply_audio(
                     audio=await audio.read(),
-                    caption=f"🎵 {title}",
+                    caption=f"🎵 {title}\n\n<i>Ijrochi:</i> {uploader}",
                     title=title
                 )
         except Exception as e:
@@ -80,11 +84,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await update.message.reply_text("❌ Audio yuklashda xato yuz berdi.")
 
-# Xatolarni qayta ishlash
+# Xatoliklarni qayta ishlash
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.error(f"Xato yuz berdi: {context.error}")
+    logger.error(msg="Xatolik yuz berdi:", exc_info=context.error)
     if isinstance(update, Update) and update.message:
-        await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko‘ring.")
+        await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
 
 # Botni ishga tushirish
 def main() -> None:
