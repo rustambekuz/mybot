@@ -1,4 +1,6 @@
-python-telegram-bot==20.3
-yt-dlp
-aiofiles
-python-dotenv
+python-telegram-bot==21.4
+yt-dlp==2024.8.6
+instaloader==4.11
+aiofiles==24.1.0
+python-dotenv==1.0.1
+aiohttp==3.9.5
