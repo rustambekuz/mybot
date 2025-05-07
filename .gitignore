@@ -1,0 +1,13 @@
+# Python virtual muhitlar
+.venv/ venv/ .venv1/ .venv2/
+# Maxfiy ma'lumotlar
+.env cookies.txt
+# Log fayllari
+bot.log *.log
+# Vaqtinchalik media va metadata fayllari
+audio_*.info.json media_*/
+# Python vaqtinchalik fayllar
+*.pyc __pycache__/ *.pyo *.pyd
+# IDE sozlamalari
+.idea/
+*.iml
