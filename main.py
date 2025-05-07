@@ -6,21 +6,20 @@ import importlib
 import aiofiles
 import time
 import aiohttp
-import asyncio
 import subprocess
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from telegram.error import Forbidden, TimedOut
+from telegram.error import Forbidden
 import googleapiclient.discovery
 import yt_dlp
 import instaloader
 from uuid import uuid4
 from dotenv import load_dotenv
 
-# .env faylidan kalitlarni o'qish
+# .env faylidan kalitlarni o‘qish
 load_dotenv()
 
-# Logging sozlash  
+# Logging sozlash
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -54,7 +53,6 @@ except Exception as e:
 # Instaloader sozlamalari
 L = instaloader.Instaloader()
 
-
 def clean_title(title: str) -> str:
     """YouTube yoki Instagram sarlavhasini tozalash"""
     if not title:
@@ -69,26 +67,26 @@ def clean_title(title: str) -> str:
         r'\s*\[Official Video\].*',  # [Official Video]
         r'\s*\(Official Music Video\).*',
         r'\s*\[Official Music Video\].*',
-        r'\s*\|.*$',  # | dan keyingi hamma narsa
-        r'\s*Video Clip.*$',  # Video Clip
-        r'\s*MV.*$',  # MV
-        r'🎵.*$',  # Musiqa emojilari
-        r'\s*\(\s*\).*',  # Bo'sh qavslar ()
-        r'\s*\[\s*\].*',  # Bo'sh kvadrat qavslar []
+        r'\s*\|.*$',                 # | dan keyingi hamma narsa
+        r'\s*Video Clip.*$',         # Video Clip
+        r'\s*MV.*$',                 # MV
+        r'🎵.*$',                    # Musiqa emojilari
+        r'\s*\(\s*\).*',             # Bo‘sh qavslar ()
+        r'\s*\[\s*\].*',             # Bo‘sh kvadrat qavslar []
     ]
     for pattern in patterns:
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
-    # Bir nechta bo'shliqlarni olib tashlash
+    # Bir nechta bo‘shliqlarni olib tashlash
     title = re.sub(r'\s+', ' ', title).strip()
 
-    # Xonanda va qo'shiq nomini ajratish
+    # Xonanda va qo‘shiq nomini ajratish
     if " - " in title:
         artist, song = title.split(" - ", 1)
     else:
         artist, song = "", title
 
-    # Apostroflarni to'g'rilash    
+    # Apostroflarni to‘g‘rilash
     song = song.replace("'", "'")
     artist = artist.replace("'", "'")
 
@@ -100,16 +98,14 @@ def clean_title(title: str) -> str:
     logger.info(f"Tozalangan sarlavha: {full_title}")
     return full_title
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Botni ishga tushirish uchun /start buyrug'i"""
     user = update.effective_user
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
         "Qo'shiq nomini yuboring (masalan: Hamdam Sobirov - Tentakcham) yoki YouTube/Instagram havolasini yuboring.\n"
-        "Instagram havolalari uchun faqat video yuklanadi!"
+        "Instagram havolalari uchun video va audio yuklab olishingiz mumkin!"
     )
-
 
 async def download_youtube_audio(video_id: str, filename: str) -> bool:
     """YouTube videodan audio yuklab olish"""
@@ -123,7 +119,7 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-            'preferredquality': '128',
+            'preferredquality': '192',
         }],
     }
 
@@ -134,50 +130,43 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
             path = f"{filename}.{ext}"
             if os.path.exists(path):
                 os.rename(path, f"{filename}.mp3")
-                file_size = os.path.getsize(f"{filename}.mp3") / (1024 * 1024)  # MB
-                logger.info(f"Yuklangan MP3 fayl hajmi: {file_size:.2f} MB")
                 return True
         return False
     except Exception as e:
         logger.error(f"YouTube audio yuklashda xato: {e}")
         return False
 
-
-async def download_instagram_media(post_url: str, filename: str) -> tuple[bool, str, str]:
-    """Instagram postdan faqat video yuklab olish"""
+async def download_instagram_media(post_url: str, filename: str) -> tuple[bool, str, str, str]:
+    """Instagram postdan media, audio va sarlavha yuklab olish"""
     try:
         shortcode = post_url.split("/")[-2]
         post = instaloader.Post.from_shortcode(L.context, shortcode)
         L.download_post(post, target=filename)
 
         video_path = ""
+        audio_path = f"{filename}.mp3"
         caption = post.caption or post.owner_username or "Instagram Post"
         caption = clean_title(caption[:100])  # Uzun tavsiflarni qisqartirish
 
         for file in os.listdir(filename):
             if file.endswith('.mp4'):
                 video_path = os.path.join(filename, file)
-                file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
-                logger.info(f"Yuklangan MP4 fayl: {video_path}, hajmi: {file_size:.2f} MB")
-                return True, video_path, caption
+                # Videodan audio ajratish
+                cmd = [
+                    'ffmpeg', '-i', video_path, '-vn', '-acodec', 'mp3',
+                    '-ab', '192k', '-y', audio_path
+                ]
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                return True, video_path, audio_path, caption
             elif file.endswith('.jpg'):
-                logger.info(f"Rasm topildi: {file}")
-                return False, "", caption
-        logger.error(f"Video fayli topilmadi, papka: {filename}")
-        return False, "", caption
-    except instaloader.exceptions.LoginRequiredException:
-        logger.error("Instagram post maxfiy, login talab qilinadi")
-        return False, "", ""
-    except instaloader.exceptions.ConnectionException as e:
-        logger.error(f"Instagram ulanish xatosi: {e}")
-        return False, "", ""
+                return False, os.path.join(filename, file), "", caption
+        return False, "", "", caption
     except Exception as e:
         logger.error(f"Instagram media yuklashda xato: {e}")
-        return False, "", ""
-
+        return False, "", "", ""
 
 async def search_youtube(query: str) -> tuple[str, str]:
-    """YouTube'da qo'shiq qidirish"""
+    """YouTube’da qo‘shiq qidirish"""
     try:
         request = youtube.search().list(
             part="snippet",
@@ -196,9 +185,8 @@ async def search_youtube(query: str) -> tuple[str, str]:
         logger.error(f"YouTube API xatosi: {e}")
         return "", ""
 
-
 async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Foydalanuvchi so'rovini qayta ishlash"""
+    """Foydalanuvchi so‘rovini qayta ishlash"""
     query_text = update.message.text
     await update.message.reply_text("🔎 Qidirilmoqda, biroz kuting...")
 
@@ -214,9 +202,9 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if video_id:
             video_id = video_id.group(1)
         else:
-            await update.message.reply_text("❌ Noto'g'ri YouTube havolasi!")
+            await update.message.reply_text("❌ Noto‘g‘ri YouTube havolasi!")
             return
-
+        # YouTube API orqali sarlavha olish
         try:
             request = youtube.videos().list(part="snippet", id=video_id)
             response = request.execute()
@@ -231,122 +219,85 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             title = query_text
 
         await update.message.reply_text(f"⬇️ Yuklanmoqda: {title}")
-
         if await download_youtube_audio(video_id, filename):
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
-                        song_name = title.split(" - ")[-1] if " - " in title else title
-                        await update.message.reply_audio(
-                            audio=await audio.read(),
-                            title=song_name[:256],
-                            caption=f"🎵 {title}"[:1024],
-                            filename=f"{title}.mp3"
-                        )
-                    break
-                except TimedOut as e:
-                    logger.error(f"Audio yuborishda timeout (urinish {attempt + 1}/{max_retries}): {e}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2)
-                    else:
-                        await update.message.reply_text("❌ Audio yuborishda xato yuz berdi (timeout).")
-                except Exception as e:
-                    logger.error(f"Audio yuborishda xato: {e}")
-                    await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
-                    break
             try:
+                async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
+                    song_name = title.split(" - ")[-1] if " - " in title else title
+                    await update.message.reply_audio(
+                        audio=await audio.read(),
+                        title=song_name[:256],
+                        caption=f"🎵 {title}"[:1024],
+                        filename=f"{title}.mp3"
+                    )
+            except Exception as e:
+                logger.error(f"Audio yuborishda xato: {e}")
+                await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
+            finally:
                 if os.path.exists(f"{filename}.mp3"):
                     os.remove(f"{filename}.mp3")
-            except Exception as e:
-                logger.error(f"Faylni o'chirishda xato: {e}")
         else:
             await update.message.reply_text("❌ Audio yuklashda xato yuz berdi.")
-
     elif is_instagram:
-        await update.message.reply_text("⬇️ Instagram'dan yuklanmoqda...")
-        success, video_path, title = await download_instagram_media(query_text, filename)
-
-        if success and video_path.endswith('.mp4'):
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    async with aiofiles.open(video_path, 'rb') as video:
-                        file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
-                        logger.info(f"Yuklangan MP4 fayl: {video_path}, hajmi: {file_size:.2f} MB")
-                        await update.message.reply_video(
-                            video=await video.read(),
-                            caption=f"🎥 {title} (Instagram Video)"[:1024],
-                            filename=f"{title}.mp4"
-                        )
-                    break
-                except TimedOut as e:
-                    logger.error(f"Video yuborishda timeout (urinish {attempt + 1}/{max_retries}): {e}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2)
-                    else:
-                        await update.message.reply_text("❌ Video yuborishda xato yuz berdi (timeout).")
-                except Exception as e:
-                    logger.error(f"Video yuborishda xato: {e}")
-                    await update.message.reply_text("❌ Video yuborishda xato yuz berdi.")
-                    break
-
+        # Instagram havolasi
+        await update.message.reply_text(f"⬇️ Instagram’dan yuklanmoqda...")
+        success, media_path, audio_path, title = await download_instagram_media(query_text, filename)
+        if success and media_path.endswith('.mp4') and audio_path:
             try:
-                if os.path.exists(video_path):
-                    os.remove(video_path)
+                song_name = title.split(" - ")[-1] if " - " in title else title
+                # Video yuborish
+                async with aiofiles.open(media_path, 'rb') as video:
+                    await update.message.reply_video(
+                        video=await video.read(),
+                        caption=f"🎥 {title} (Instagram Video)"[:1024],
+                        filename=f"{title}.mp4"
+                    )
+                # Audio yuborish
+                async with aiofiles.open(audio_path, 'rb') as audio:
+                    await update.message.reply_audio(
+                        audio=await audio.read(),
+                        title=song_name[:256],
+                        caption=f"🎵 {title} (Instagram Audio)"[:1024],
+                        filename=f"{title}.mp3"
+                    )
+            except Exception as e:
+                logger.error(f"Instagram media yuborishda xato: {e}")
+                await update.message.reply_text("❌ Media yuborishda xato yuz berdi.")
+            finally:
+                if os.path.exists(media_path):
+                    os.remove(media_path)
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
                 if os.path.exists(filename):
                     for file in os.listdir(filename):
                         os.remove(os.path.join(filename, file))
                     os.rmdir(filename)
-            except Exception as e:
-                logger.error(f"Fayllarni o'chirishda xato: {e}")
         else:
-            if video_path:
-                await update.message.reply_text("❌ Bu Instagram posti rasm, video emas!")
-            elif "login" in str(title).lower():
-                await update.message.reply_text("❌ Instagram post maxfiy, iltimos, jamoatchi reel havolasini yuboring.")
-            else:
-                await update.message.reply_text("❌ Instagram'dan video yuklashda xato yuz berdi!")
-
+            await update.message.reply_text("❌ Instagram’dan media yuklashda xato yuz berdi yoki bu rasm!")
     else:
-        # Qo'shiq nomi bo'lsa, YouTube'da qidirish
+        # Qo‘shiq nomi bo‘lsa, YouTube’da qidirish
         video_id, title = await search_youtube(query_text)
         if not video_id:
-            await update.message.reply_text("❌ Hech narsa topilmadi. Boshqa so'rov yuborib ko'ring.")
+            await update.message.reply_text("❌ Hech narsa topilmadi. Boshqa so‘rov yuborib ko‘ring.")
             return
-
         await update.message.reply_text(f"⬇️ Yuklanmoqda: {title}")
         if await download_youtube_audio(video_id, filename):
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
-                        song_name = title.split(" - ")[-1] if " - " in title else title
-                        await update.message.reply_audio(
-                            audio=await audio.read(),
-                            title=song_name[:256],
-                            caption=f"🎵 {title}"[:1024],
-                            filename=f"{title}.mp3"
-                        )
-                    break
-                except TimedOut as e:
-                    logger.error(f"Audio yuborishda timeout (urinish {attempt + 1}/{max_retries}): {e}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2)
-                    else:
-                        await update.message.reply_text("❌ Audio yuborishda xato yuz berdi (timeout).")
-                except Exception as e:
-                    logger.error(f"Audio yuborishda xato: {e}")
-                    await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
-                    break
             try:
+                async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
+                    song_name = title.split(" - ")[-1] if " - " in title else title
+                    await update.message.reply_audio(
+                        audio=await audio.read(),
+                        title=song_name[:256],
+                        caption=f"🎵 {title}"[:1024],
+                        filename=f"{title}.mp3"
+                    )
+            except Exception as e:
+                logger.error(f"Audio yuborishda xato: {e}")
+                await update.message.reply_text("❌ Audio yuborishda xato yuz berdi.")
+            finally:
                 if os.path.exists(f"{filename}.mp3"):
                     os.remove(f"{filename}.mp3")
-            except Exception as e:
-                logger.error(f"Faylni o'chirishda xato: {e}")
         else:
             await update.message.reply_text("❌ Audio yuklashda xato yuz berdi.")
-
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Xatolarni ushlash va foydalanuvchiga xabar berish"""
@@ -354,19 +305,13 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if isinstance(context.error, Forbidden):
         logger.warning("Bot foydalanuvchi tomonidan bloklangan. Xabar yuborilmaydi.")
         return
-    if isinstance(context.error, TimedOut):
-        logger.warning("Telegram API timeout xatosi, xabar yuborish o'tkazib yuborildi.")
-        return
     if update and update.message:
         try:
-            await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
+            await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko‘ring.")
         except Forbidden:
-            logger.warning("Bot bloklangan, xabar yuborib bo'lmadi.")
-        except TimedOut:
-            logger.warning("Xato xabarini yuborishda timeout.")
+            logger.warning("Bot bloklangan, xabar yuborib bo‘lmadi.")
         except Exception as e:
             logger.error(f"Xato xabarini yuborishda xato: {e}")
-
 
 def verify_dependencies():
     """Kerakli kutubxonalarni tekshirish"""
@@ -389,7 +334,6 @@ def verify_dependencies():
             missing.append(package)
     return missing
 
-
 def main() -> None:
     """Botni ishga tushirish"""
     missing_packages = verify_dependencies()
@@ -408,9 +352,9 @@ def main() -> None:
                 Application.builder()
                 .token(TOKEN)
                 .get_updates_read_timeout(30)
-                .get_updates_write_timeout(60)
+                .get_updates_write_timeout(30)
                 .get_updates_connect_timeout(30)
-                .get_updates_pool_timeout(60)
+                .get_updates_pool_timeout(30)
                 .build()
             )
 
@@ -433,7 +377,6 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Botni ishga tushirishda xato: {str(e)}")
             break
-
 
 if __name__ == "__main__":
     main()
