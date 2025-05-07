@@ -55,21 +55,48 @@ L = instaloader.Instaloader()
 
 def clean_title(title: str) -> str:
     """YouTube yoki Instagram sarlavhasini tozalash"""
+    if not title:
+        return "Unknown Title"
+
+    # HTML belgilarni tozalash
+    title = html.unescape(title)
+
+    # Keraksiz qismlarni olib tashlash
+    patterns = [
+        r'\s*\(Official Video\).*',  # (Official Video)
+        r'\s*\[Official Video\].*',  # [Official Video]
+        r'\s*\(Official Music Video\).*',
+        r'\s*\[Official Music Video\].*',
+        r'\s*\|.*$',                 # | dan keyingi hamma narsa
+        r'\s*Video Clip.*$',         # Video Clip
+        r'\s*MV.*$',                 # MV
+        r'🎵.*$',                    # Musiqa emojilari
+        r'\s*\(\s*\).*',             # Bo‘sh qavslar ()
+        r'\s*\[\s*\].*',             # Bo‘sh kvadrat qavslar []
+    ]
+    for pattern in patterns:
+        title = re.sub(pattern, '', title, flags=re.IGNORECASE)
+
+    # Bir nechta bo‘shliqlarni olib tashlash
+    title = re.sub(r'\s+', ' ', title).strip()
+
+    # Xonanda va qo‘shiq nomini ajratish
     if " - " in title:
         artist, song = title.split(" - ", 1)
     else:
         artist, song = "", title
 
-    song = re.sub(r'\s*\|.*$', '', song)
-    song = re.sub(r'\s*Video Clip.*$', '', song, flags=re.IGNORECASE)
-    song = re.sub(r'■.*$', '', song)
-    song = re.sub(r'\s*\.*?\)', '', song)
-    song = re.sub(r'\s+', ' ', song).strip()
+    # Apostroflarni to‘g‘rilash
+    song = song.replace("'", "'")
+    artist = artist.replace("'", "'")
 
-    song = html.unescape(song).replace("'", "'")
-    artist = html.unescape(artist).replace("'", "'")
+    # Telegram cheklovlari uchun uzunlikni qisqartirish
+    song = song[:256]  # title uchun
+    full_title = f"{artist} - {song}" if artist else song
+    full_title = full_title[:1024]  # caption uchun
 
-    return f"{artist} - {song}" if artist else song
+    logger.info(f"Tozalangan sarlavha: {full_title}")
+    return full_title
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Botni ishga tushirish uchun /start buyrug'i"""
@@ -150,7 +177,9 @@ async def search_youtube(query: str) -> tuple[str, str]:
         response = request.execute()
         if response.get("items"):
             item = response["items"][0]
-            return item["id"]["videoId"], clean_title(item["snippet"]["title"])
+            raw_title = item["snippet"]["title"]
+            logger.info(f"YouTube xom sarlavha: {raw_title}")
+            return item["id"]["videoId"], clean_title(raw_title)
         return "", ""
     except Exception as e:
         logger.error(f"YouTube API xatosi: {e}")
@@ -180,7 +209,9 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             request = youtube.videos().list(part="snippet", id=video_id)
             response = request.execute()
             if response.get("items"):
-                title = clean_title(response["items"][0]["snippet"]["title"])
+                raw_title = response["items"][0]["snippet"]["title"]
+                logger.info(f"YouTube xom sarlavha (havola): {raw_title}")
+                title = clean_title(raw_title)
             else:
                 title = query_text
         except Exception as e:
@@ -194,8 +225,8 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     song_name = title.split(" - ")[-1] if " - " in title else title
                     await update.message.reply_audio(
                         audio=await audio.read(),
-                        title=song_name,
-                        caption=f"🎵 {title}",
+                        title=song_name[:256],
+                        caption=f"🎵 {title}"[:1024],
                         filename=f"{title}.mp3"
                     )
             except Exception as e:
@@ -217,15 +248,15 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 async with aiofiles.open(media_path, 'rb') as video:
                     await update.message.reply_video(
                         video=await video.read(),
-                        caption=f"🎥 {title} (Instagram Video)",
+                        caption=f"🎥 {title} (Instagram Video)"[:1024],
                         filename=f"{title}.mp4"
                     )
                 # Audio yuborish
                 async with aiofiles.open(audio_path, 'rb') as audio:
                     await update.message.reply_audio(
                         audio=await audio.read(),
-                        title=song_name,
-                        caption=f"🎵 {title} (Instagram Audio)",
+                        title=song_name[:256],
+                        caption=f"🎵 {title} (Instagram Audio)"[:1024],
                         filename=f"{title}.mp3"
                     )
             except Exception as e:
@@ -255,8 +286,8 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     song_name = title.split(" - ")[-1] if " - " in title else title
                     await update.message.reply_audio(
                         audio=await audio.read(),
-                        title=song_name,
-                        caption=f"🎵 {title}",
+                        title=song_name[:256],
+                        caption=f"🎵 {title}"[:1024],
                         filename=f"{title}.mp3"
                     )
             except Exception as e:
