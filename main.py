@@ -8,6 +8,7 @@ import time
 import aiohttp
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.error import Forbidden
 import googleapiclient.discovery
 import yt_dlp
 import instaloader
@@ -221,8 +222,16 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Xatolarni ushlash va foydalanuvchiga xabar berish"""
     logger.error(f"Xato yuz berdi: {context.error}")
+    if isinstance(context.error, Forbidden):
+        logger.warning("Bot foydalanuvchi tomonidan bloklangan. Xabar yuborilmaydi.")
+        return
     if update and update.message:
-        await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko‘ring.")
+        try:
+            await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko‘ring.")
+        except Forbidden:
+            logger.warning("Bot bloklangan, xabar yuborib bo‘lmadi.")
+        except Exception as e:
+            logger.error(f"Xato xabarini yuborishda xato: {e}")
 
 def verify_dependencies():
     """Kerakli kutubxonalarni tekshirish"""
