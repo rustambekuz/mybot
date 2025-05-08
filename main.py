@@ -17,10 +17,8 @@ import instaloader
 from uuid import uuid4
 from dotenv import load_dotenv
 
-# .env faylidan kalitlarni o'qish
 load_dotenv()
 
-# Logging sozlash
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -31,18 +29,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# API sozlamalari
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Kalitlar mavjudligini tekshirish
 if not DEVELOPER_KEY or not TOKEN:
     logger.error("YOUTUBE_API_KEY yoki TELEGRAM_TOKEN .env faylida topilmadi!")
     raise ValueError("API kalitlari yoki token sozlanmagan!")
 
-# YouTube API ulanish
 try:
     youtube = googleapiclient.discovery.build(
         API_SERVICE_NAME, API_VERSION, developerKey=DEVELOPER_KEY, cache_discovery=False
@@ -51,7 +46,6 @@ except Exception as e:
     logger.error(f"YouTube API ulanishda xato: {e}")
     raise
 
-# Instaloader sozlamalari
 L = instaloader.Instaloader(
     max_connection_attempts=10,
     sleep=True,
@@ -61,58 +55,49 @@ L = instaloader.Instaloader(
 
 
 def clean_title(title: str) -> str:
-    """YouTube yoki Instagram sarlavhasini tozalash"""
     if not title:
         return "Instagram Reel"
 
-    # HTML belgilarni tozalash
     title = html.unescape(title)
 
-    # Keraksiz qismlarni olib tashlash
     patterns = [
-        r'\s*\(Official Video\).*',  # (Official Video)
-        r'\s*\[Official Video\].*',  # [Official Video]
+        r'\s*\(Official Video\).*',
+        r'\s*\[Official Video\].*',
         r'\s*\(Official Music Video\).*',
         r'\s*\[Official Music Video\].*',
-        r'\s*\|.*$',  # | dan keyingi hamma narsa
-        r'\s*Video Clip.*$',  # Video Clip
-        r'\s*MV.*$',  # MV
-        r'🎵.*$',  # Musiqa emojilari
-        r'\s*\(\s*\).*',  # Bo'sh qavslar ()
-        r'\s*\[\s*\].*',  # Bo'sh kvadrat qavslar []
-        r'\s*#[^\s]*',  # Hashtag'lar
+        r'\s*\|.*$',
+        r'\s*Video Clip.*$',
+        r'\s*MV.*$',
+        r'🎵.*$',
+        r'\s*\(\s*\).*',
+        r'\s*\[\s*\].*',
+        r'\s*#[^\s]*',
     ]
     for pattern in patterns:
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
 
-    # Bir nechta bo'shliqlarni olib tashlash
     title = re.sub(r'\s+', ' ', title).strip()
 
-    # Agar title bo'sh bo'lsa
     if not title:
         return "Instagram Reel"
 
-    # Xonanda va qo'shiq nomini ajratish
     if " - " in title:
         artist, song = title.split(" - ", 1)
     else:
         artist, song = "", title
 
-    # Apostroflarni to'g'rilash
     song = song.replace("'", "'")
     artist = artist.replace("'", "'")
 
-    # Telegram cheklovlari uchun uzunlikni qisqartirish
-    song = song[:256]  # title uchun
+    song = song[:256]
     full_title = f"{artist} - {song}" if artist else song
-    full_title = full_title[:1024]  # caption uchun
+    full_title = full_title[:1024]
 
     logger.info(f"Tozalangan sarlavha: {full_title}")
     return full_title
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Botni ishga tushirish uchun /start buyrug'i"""
     user = update.effective_user
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
@@ -122,7 +107,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def download_youtube_audio(video_id: str, filename: str) -> bool:
-    """YouTube videodan audio yuklab olish"""
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
         'format': 'bestaudio',
@@ -154,7 +138,6 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
 
 
 async def download_instagram_media(post_url: str, filename: str) -> tuple[bool, str, str]:
-    """Instagram postdan faqat video yuklab olish"""
     try:
         shortcode = post_url.split("/")[-2]
         post = instaloader.Post.from_shortcode(L.context, shortcode)
@@ -193,7 +176,6 @@ async def download_instagram_media(post_url: str, filename: str) -> tuple[bool, 
 
 
 async def search_youtube(query: str) -> tuple[str, str]:
-    """YouTube'da qo'shiq qidirish"""
     try:
         request = youtube.search().list(
             part="snippet",
@@ -214,7 +196,6 @@ async def search_youtube(query: str) -> tuple[str, str]:
 
 
 async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Foydalanuvchi so'rovini qayta ishlash"""
     query_text = update.message.text
     await update.message.reply_text("🔎 Qidirilmoqda, biroz kuting...")
 
@@ -263,7 +244,6 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def process_youtube_download(update: Update, video_id: str, filename: str, title: str) -> None:
-    """YouTube yuklab olish jarayoni"""
     if await download_youtube_audio(video_id, filename):
         max_retries = 3
         for attempt in range(max_retries):
@@ -291,7 +271,6 @@ async def process_youtube_download(update: Update, video_id: str, filename: str,
 
 
 async def process_instagram_download(update: Update, post_url: str, filename: str) -> None:
-    """Instagram yuklab olish jarayoni"""
     success, video_path, title = await download_instagram_media(post_url, filename)
 
     if success and video_path.endswith('.mp4'):
@@ -326,7 +305,6 @@ async def process_instagram_download(update: Update, post_url: str, filename: st
 
 
 def cleanup_files(filename: str) -> None:
-    """Vaqtinchalik fayllarni tozalash"""
     try:
         if os.path.exists(f"{filename}.mp3"):
             os.remove(f"{filename}.mp3")
@@ -339,7 +317,6 @@ def cleanup_files(filename: str) -> None:
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Xatolarni ushlash va foydalanuvchiga xabar berish"""
     logger.error(f"Xato yuz berdi: {context.error}")
 
     if isinstance(context.error, Forbidden):
@@ -360,7 +337,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def verify_dependencies() -> list:
-    """Kerakli kutubxonalarni tekshirish"""
     required_packages = [
         ('python-telegram-bot', 'telegram'),
         ('google-api-python-client', 'googleapiclient'),
@@ -383,7 +359,6 @@ def verify_dependencies() -> list:
 
 
 def main() -> None:
-    """Botni ishga tushirish"""
     missing_packages = verify_dependencies()
     if missing_packages:
         logger.error(f"Quyidagi kutubxonalar o'rnatilmagan: {', '.join(missing_packages)}")
