@@ -97,7 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def main() -> None:
-    BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # <-- Bu yerga o‘z tokeningizni yozing
+    BOT_TOKEN = "7328515791:AAGfDjpJ8uV-IGuIwrYZSi6HVrbu41MRwk4"  # <-- Bu yerga o‘z tokeningizni yozing
     retry_count = 0
     retry_limit = 5
     retry_delay = 5  # sekund
