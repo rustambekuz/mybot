@@ -11,13 +11,11 @@ from dotenv import load_dotenv
 import googleapiclient.discovery
 import googleapiclient.errors
 import yt_dlp
-import instaloader
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.error import Forbidden, TimedOut
 import structlog
 from cachetools import TTLCache
-import certifi
 
 # Environment variables
 load_dotenv()
@@ -61,53 +59,23 @@ except Exception as e:
     logger.error("Failed to initialize YouTube API", error=str(e))
     raise
 
-# Instaloader setup (removed unsupported parameter)
-os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
-L = instaloader.Instaloader(
-    max_connection_attempts=3,
-    request_timeout=30,
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-
-# Optional Instagram login
-def login_instaloader():
-    username = os.getenv("INSTAGRAM_USERNAME")
-    password = os.getenv("INSTAGRAM_PASSWORD")
-    if not username or not password:
-        logger.warning("Instagram login credentials missing, only public posts will be accessible")
-        return
-    try:
-        L.login(username, password)
-        logger.info("Instagram login successful")
-    except instaloader.exceptions.BadCredentialsException:
-        logger.error("Invalid Instagram username or password")
-        raise
-    except instaloader.exceptions.TwoFactorAuthRequiredException:
-        logger.error("Two-factor authentication is enabled, please disable it")
-        raise
-    except Exception as e:
-        logger.error("Instagram login failed", error=str(e))
-        raise
-
-login_instaloader()
-
 def clean_title(title: str) -> str:
     if not title:
-        return "Instagram Reel"
+        return "Unknown Song"
 
     title = html.unescape(title)
 
     patterns = [
-        r'\s*$$ Official Video $$.*',
-        r'\s*$$ Official Video $$.*',
-        r'\s*$$ Official Music Video $$.*',
-        r'\s*$$ Official Music Video $$.*',
+        r'\s*\(Official Video\).*',
+        r'\s*\[Official Video\].*',
+        r'\s*\(Official Music Video\).*',
+        r'\s*\[Official Music Video\].*',
         r'\s*\|.*$',
         r'\s*Video Clip.*$',
         r'\s*MV.*$',
         r'🎵.*$',
-        r'\s*$$ \s* $$.*',
-        r'\s*$$ \s* $$.*',
+        r'\s*\(\s*\).*',
+        r'\s*\[\s*\].*',
         r'\s*#[^\s]*',
     ]
     for pattern in patterns:
@@ -116,7 +84,7 @@ def clean_title(title: str) -> str:
     title = re.sub(r'\s+', ' ', title).strip()
 
     if not title:
-        return "Instagram Reel"
+        return "Unknown Song"
 
     if " - " in title:
         artist, song = title.split(" - ", 1)
@@ -134,15 +102,26 @@ def clean_title(title: str) -> str:
     return full_title
 
 def is_valid_url(url: str) -> bool:
-    pattern = r'^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|instagram\.com)\/.*$'
+    pattern = r'^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.*$'
     return bool(re.match(pattern, url))
+
+def parse_query(query: str) -> tuple[str, str]:
+    query = query.strip()
+    if " - " in query:
+        artist, song = query.split(" - ", 1)
+        return artist.strip(), song.strip()
+    words = query.split()
+    if len(words) >= 2:
+        artist = words[0]
+        song = " ".join(words[1:])
+        return artist.strip(), song.strip()
+    return "", query.strip()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
-        "Qo'shiq nomini yuboring (masalan: Hamdam Sobirov - Tentakcham) yoki YouTube/Instagram havolasini yuboring.\n"
-        "Instagram havolalari uchun faqat video yuklanadi!"
+        "Qo‘shiqchi ismi va qo‘shiq nomini kiriting (masalan: Hamdam Sobirov - Tentakcham) yoki YouTube havolasini yuboring."
     )
 
 async def download_youtube_audio(video_id: str, filename: str) -> bool:
@@ -171,13 +150,14 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
         }],
         'max_duration': 600,
         'noplaylist': True,
-        'overwrite': False,
+        'nooverwrites': True,
     }
 
     try:
         loop = asyncio.get_event_loop()
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            await loop.run_in_executor(None, ydl.download, [url])
+        async with asyncio.timeout(300):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                await loop.run_in_executor(None, ydl.download, [url])
 
         for ext in ['webm', 'm4a', 'mp3']:
             temp_path = f"{filename}.{ext}"
@@ -199,61 +179,28 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
         logger.error("YouTube download failed", error=str(e))
         return False
 
-async def download_instagram_media(post_url: str, filename: str) -> tuple[bool, str, str]:
-    try:
-        shortcode = post_url.split("/")[-2]
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
-        L.download_post(post, target=filename)
-
-        video_path = ""
-        caption = post.caption or post.owner_username or "Instagram Reel"
-        caption = clean_title(caption[:100])
-
-        files = os.listdir(filename)
-        logger.info("Files in directory", files=files)
-
-        mp4_files = [f for f in files if f.endswith('.mp4')]
-        if mp4_files:
-            video_path = os.path.join(filename, mp4_files[0])
-            file_size = os.path.getsize(video_path) / (1024 * 1024)
-            if file_size > 50:
-                logger.warning("Instagram video exceeds Telegram limit", size=file_size)
-                return False, "", caption
-            logger.info("Downloaded MP4 file", path=video_path, size=file_size)
-            return True, video_path, caption
-
-        jpg_files = [f for f in files if f.endswith('.jpg')]
-        if jpg_files:
-            logger.info("Image found", file=jpg_files[0])
-            return False, "", caption
-
-        logger.error("No video file found", directory=filename)
-        return False, "", caption
-    except instaloader.exceptions.LoginRequiredException:
-        logger.error("Instagram post is private")
-        return False, "", "maxfiy post"
-    except instaloader.exceptions.ConnectionException as e:
-        logger.error("Instagram connection error", error=str(e))
-        return False, "", "ulanish xatosi"
-    except Exception as e:
-        logger.error("Instagram download failed", error=str(e))
-        return False, "", ""
-
-async def search_youtube(query: str) -> tuple[str, str]:
+async def search_youtube(artist: str, song: str) -> tuple[str, str]:
+    query = f"{artist} {song}" if artist else song
     for attempt in range(3):
         try:
             request = youtube.search().list(
                 part="snippet",
                 q=query,
                 type="video",
-                maxResults=1
+                maxResults=5
             )
             response = request.execute()
             if response.get("items"):
-                item = response["items"][0]
-                raw_title = item["snippet"]["title"]
-                logger.info("YouTube raw title", title=raw_title)
-                return item["id"]["videoId"], clean_title(raw_title)
+                for item in response["items"]:
+                    raw_title = item["snippet"]["title"]
+                    title = clean_title(raw_title).lower()
+                    if artist and song:
+                        if artist.lower() in title and song.lower() in title:
+                            logger.info("YouTube matched title", title=raw_title)
+                            return item["id"]["videoId"], clean_title(raw_title)
+                    elif song.lower() in title:
+                        logger.info("YouTube matched title", title=raw_title)
+                        return item["id"]["videoId"], clean_title(raw_title)
             return "", ""
         except googleapiclient.errors.HttpError as e:
             if e.resp.status == 429:
@@ -267,25 +214,18 @@ async def search_youtube(query: str) -> tuple[str, str]:
     logger.error("YouTube search retries exhausted")
     return "", ""
 
-async def send_file(update: Update, file_path: str, title: str, is_audio: bool = True) -> bool:
+async def send_file(update: Update, file_path: str, title: str) -> bool:
     max_retries = 3
     for attempt in range(max_retries):
         try:
             async with aiofiles.open(file_path, 'rb') as file:
-                if is_audio:
-                    song_name = title.split(" - ")[-1] if " - " in title else title
-                    await update.message.reply_audio(
-                        audio=await file.read(),
-                        title=song_name[:256],
-                        caption=f"🎵 {title}"[:1024],
-                        filename=f"{title}.mp3"
-                    )
-                else:
-                    await update.message.reply_video(
-                        video=await file.read(),
-                        caption=f"🎥 {title} (Instagram Video)"[:1024],
-                        filename=f"{title}.mp4"
-                    )
+                song_name = title.split(" - ")[-1] if " - " in title else title
+                await update.message.reply_audio(
+                    audio=await file.read(),
+                    title=song_name[:256],
+                    caption=f"🎵 {title}"[:1024],
+                    filename=f"{title}.mp3"
+                )
             return True
         except TimedOut:
             if attempt == max_retries - 1:
@@ -309,7 +249,6 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     msg = await update.message.reply_text("🔎 Qidirilmoqda...")
 
     is_youtube = "youtube.com" in query_text or "youtu.be" in query_text
-    is_instagram = "instagram.com" in query_text
     filename = f"media_{uuid4().hex}"
 
     try:
@@ -335,17 +274,14 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 await msg.edit_text(f"⬇️ Yuklanmoqda: {title}")
                 await process_youtube_download(update, msg, video_id, filename, title)
 
-            elif is_instagram:
-                if not is_valid_url(query_text):
-                    await msg.edit_text("❌ Noto'g'ri Instagram havolasi!")
-                    return
-                await msg.edit_text("⬇️ Instagram'dan yuklanmoqda...")
-                await process_instagram_download(update, msg, query_text, filename)
-
             else:
-                video_id, title = await search_youtube(query_text)
+                artist, song = parse_query(query_text)
+                if not song:
+                    await msg.edit_text("❌ Qo‘shiq nomini kiriting!")
+                    return
+                video_id, title = await search_youtube(artist, song)
                 if not video_id:
-                    await msg.edit_text("❌ Hech narsa topilmadi. Boshqa so'rov yuborib ko'ring.")
+                    await msg.edit_text("❌ Hech narsa topilmadi. Artist va qo‘shiq nomini to‘g‘ri kiriting.")
                     return
 
                 await msg.edit_text(f"⬇️ Yuklanmoqda: {title}")
@@ -362,24 +298,9 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def process_youtube_download(update: Update, msg, video_id: str, filename: str, title: str) -> None:
     if await download_youtube_audio(video_id, filename):
-        await send_file(update, f"{filename}.mp3", title, is_audio=True)
+        await send_file(update, f"{filename}.mp3", title)
     else:
         await msg.edit_text("❌ Audio yuklashda xato yuz berdi.")
-
-async def process_instagram_download(update: Update, msg, post_url: str, filename: str) -> None:
-    success, video_path, title = await download_instagram_media(post_url, filename)
-
-    if success and video_path.endswith('.mp4'):
-        await send_file(update, video_path, title, is_audio=False)
-    else:
-        if title == "maxfiy post":
-            await msg.edit_text("❌ Instagram post maxfiy, iltimos, jamoatchi reel havolasini yuboring.")
-        elif title == "ulanish xatosi":
-            await msg.edit_text("❌ Instagram serveriga ulanishda xato, keyinroq urinib ko'ring.")
-        elif video_path:
-            await send_file(update, video_path, title, is_audio=False)
-        else:
-            await msg.edit_text("❌ Instagram'dan video yuklashda xato yuz berdi!")
 
 async def cleanup_files(filename: str) -> None:
     max_retries = 3
@@ -393,8 +314,9 @@ async def cleanup_files(filename: str) -> None:
             if os.path.exists(filename):
                 for file in os.listdir(filename):
                     file_path = os.path.join(filename, file)
-                    os.remove(file_path)
-                    logger.info("Removed temporary file", path=file_path)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        logger.info("Removed temporary file", path=file_path)
                 os.rmdir(filename)
                 logger.info("Removed temporary directory", path=filename)
             break
@@ -426,7 +348,6 @@ def verify_dependencies() -> list:
         ('python-telegram-bot', 'telegram'),
         ('google-api-python-client', 'googleapiclient'),
         ('yt-dlp', 'yt_dlp'),
-        ('instaloader', 'instaloader'),
         ('aiofiles', 'aiofiles'),
         ('python-dotenv', 'dotenv'),
         ('structlog', 'structlog'),
