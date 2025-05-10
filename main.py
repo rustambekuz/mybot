@@ -19,10 +19,10 @@ import structlog
 from cachetools import TTLCache
 import certifi
 
-# Load environment variables
+# Environment variables
 load_dotenv()
 
-# Structured logging setup
+# Logging setup
 structlog.configure(
     processors=[
         structlog.processors.TimeStamper(fmt="iso"),
@@ -36,7 +36,7 @@ structlog.configure(
 )
 logger = structlog.get_logger()
 
-# Environment variable validation
+# Check environment variables
 required_env_vars = ["YOUTUBE_API_KEY", "TELEGRAM_TOKEN"]
 for var in required_env_vars:
     if not os.getenv(var):
@@ -49,8 +49,8 @@ DEVELOPER_KEY = os.getenv("YOUTUBE_API_KEY")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 COOKIES_PATH = os.getenv("COOKIES_PATH", "cookies.txt")
 
-# Rate limiting cache
-user_requests = TTLCache(maxsize=1000, ttl=60)  # 1-minute TTL, max 5 requests per user
+# Rate limit cache
+user_requests = TTLCache(maxsize=1000, ttl=60)  # 1 min TTL, max 5 requests per user
 
 # YouTube API setup
 try:
@@ -61,13 +61,11 @@ except Exception as e:
     logger.error("Failed to initialize YouTube API", error=str(e))
     raise
 
-# Instaloader setup
+# Instaloader setup (removed unsupported parameter)
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 L = instaloader.Instaloader(
     max_connection_attempts=3,
-    sleep=True,
     request_timeout=30,
-    sleep_between_requests=5,
     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
@@ -178,9 +176,8 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
 
     try:
         loop = asyncio.get_event_loop()
-        async with asyncio.timeout(300):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                await loop.run_in_executor(None, ydl.download, [url])
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            await loop.run_in_executor(None, ydl.download, [url])
 
         for ext in ['webm', 'm4a', 'mp3']:
             temp_path = f"{filename}.{ext}"
@@ -380,7 +377,7 @@ async def process_instagram_download(update: Update, msg, post_url: str, filenam
         elif title == "ulanish xatosi":
             await msg.edit_text("❌ Instagram serveriga ulanishda xato, keyinroq urinib ko'ring.")
         elif video_path:
-            await msg.edit_text("❌ Bu Instagram posti rasm, video emas!")
+            await send_file(update, video_path, title, is_audio=False)
         else:
             await msg.edit_text("❌ Instagram'dan video yuklashda xato yuz berdi!")
 
@@ -410,15 +407,12 @@ async def cleanup_files(filename: str) -> None:
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Bot error", error=str(context.error))
-
     if isinstance(context.error, Forbidden):
         logger.warning("Bot blocked by user")
         return
-
     if isinstance(context.error, TimedOut):
         logger.warning("Telegram API timeout")
         return
-
     if update and update.message:
         try:
             await update.message.reply_text("❌ Botda muammo yuz berdi. Keyinroq urinib ko'ring.")
@@ -438,7 +432,6 @@ def verify_dependencies() -> list:
         ('structlog', 'structlog'),
         ('cachetools', 'cachetools'),
     ]
-
     missing = []
     for package, module in required_packages:
         try:
@@ -459,7 +452,6 @@ def main() -> None:
     max_retries = 3
     retry_count = 0
     retry_delay = 5
-
     while retry_count < max_retries:
         try:
             logger.info("Initializing Telegram bot application")
@@ -472,15 +464,12 @@ def main() -> None:
                 .get_updates_pool_timeout(60)
                 .build()
             )
-
             application.add_handler(CommandHandler("start", start))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_media))
             application.add_error_handler(error_handler)
-
             logger.info("Bot started successfully")
             application.run_polling(allowed_updates=Update.ALL_TYPES)
             break
-
         except TimeoutError as e:
             retry_count += 1
             logger.error(f"Timeout error ({retry_count}/{max_retries})", error=str(e))
