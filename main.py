@@ -155,6 +155,7 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
 
     try:
         loop = asyncio.get_event_loop()
+        logger.info("Starting YouTube download", video_id=video_id, filename=filename)
         async with asyncio.timeout(300):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 await loop.run_in_executor(None, ydl.download, [url])
@@ -170,13 +171,13 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
                     return False
                 logger.info("Downloaded and renamed MP3 file", path=output_path, size=file_size)
                 return True
-        logger.error("No audio file found after download")
+        logger.error("No audio file found after download", video_id=video_id)
         return False
     except asyncio.TimeoutError:
-        logger.error("YouTube download timed out")
+        logger.error("YouTube download timed out", video_id=video_id)
         return False
     except Exception as e:
-        logger.error("YouTube download failed", error=str(e))
+        logger.error("YouTube download failed", video_id=video_id, error=str(e))
         return False
 
 async def search_youtube(artist: str, song: str) -> tuple[str, str]:
@@ -220,20 +221,24 @@ async def send_file(update: Update, file_path: str, title: str) -> bool:
         try:
             async with aiofiles.open(file_path, 'rb') as file:
                 song_name = title.split(" - ")[-1] if " - " in title else title
+                logger.info("Sending audio file", title=title, attempt=attempt + 1)
                 await update.message.reply_audio(
                     audio=await file.read(),
                     title=song_name[:256],
                     caption=f"🎵 {title}"[:1024],
                     filename=f"{title}.mp3"
                 )
+            logger.info("Audio file sent successfully", title=title)
             return True
         except TimedOut:
             if attempt == max_retries - 1:
+                logger.error("File sending timed out after retries", title=title)
                 await update.message.reply_text("❌ Fayl yuborishda xato (timeout).")
                 return False
+            logger.warning("File sending timed out, retrying", attempt=attempt + 1)
             await asyncio.sleep(2 ** (attempt + 1))
         except Exception as e:
-            logger.error("File sending failed", error=str(e))
+            logger.error("File sending failed", title=title, error=str(e))
             await update.message.reply_text("❌ Fayl yuborishda xato yuz berdi.")
             return False
     return False
@@ -246,6 +251,7 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_requests[user_id] = user_requests.get(user_id, 0) + 1
 
     query_text = update.message.text
+    logger.info("Processing media request", query=query_text, user_id=user_id)
     msg = await update.message.reply_text("🔎 Qidirilmoqda...")
 
     is_youtube = "youtube.com" in query_text or "youtu.be" in query_text
@@ -272,6 +278,7 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     title = query_text
 
                 await msg.edit_text(f"⬇️ Yuklanmoqda: {title}")
+                logger.info("Processing YouTube URL", video_id=video_id, title=title)
                 await process_youtube_download(update, msg, video_id, filename, title)
 
             else:
@@ -285,21 +292,25 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     return
 
                 await msg.edit_text(f"⬇️ Yuklanmoqda: {title}")
+                logger.info("Processing YouTube search", artist=artist, song=song, title=title)
                 await process_youtube_download(update, msg, video_id, filename, title)
 
     except asyncio.TimeoutError:
-        logger.error("Media processing timed out")
+        logger.error("Media processing timed out", query=query_text)
         await msg.edit_text("❌ Vaqt tugadi, iltimos qayta urinib ko'ring.")
     except Exception as e:
-        logger.error("Media processing failed", error=str(e), exc_info=True)
+        logger.error("Media processing failed", query=query_text, error=str(e), exc_info=True)
         await msg.edit_text("❌ Xato yuz berdi. Iltimos qayta urinib ko'ring.")
     finally:
         await cleanup_files(filename)
 
 async def process_youtube_download(update: Update, msg, video_id: str, filename: str, title: str) -> None:
+    logger.info("Starting YouTube download process", video_id=video_id, title=title)
     if await download_youtube_audio(video_id, filename):
+        logger.info("YouTube download successful, sending file", title=title)
         await send_file(update, f"{filename}.mp3", title)
     else:
+        logger.error("YouTube download failed", video_id=video_id, title=title)
         await msg.edit_text("❌ Audio yuklashda xato yuz berdi.")
 
 async def cleanup_files(filename: str) -> None:
