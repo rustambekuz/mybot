@@ -118,12 +118,11 @@ async def download_youtube_audio(query: str, filename: str) -> Tuple[bool, str]:
                 logger.info(f"Downloaded MP3 size: {file_size:.2f} MB")
                 if file_size > CONFIG['MAX_FILE_SIZE_MB']:
                     logger.info("Compressing oversized file...")
-                    new_filename = f"{filename}_compressed.mp3"
                     subprocess.run([
-                        'ffmpeg', '-i', f"{filename}.mp3", '-b:a', '64k', new_filename
+                        'ffmpeg', '-i', f"{filename}.mp3", '-b:a', '64k', f"{filename}_compressed.mp3"
                     ], check=True)
                     os.remove(f"{filename}.mp3")
-                    os.rename(new_filename, f"{filename}.mp3")
+                    os.rename(f"{filename}_compressed.mp3", f"{filename}.mp3")
                     file_size = os.path.getsize(f"{filename}.mp3") / (1024 * 1024)
                     logger.info(f"Compressed MP3 size: {file_size:.2f} MB")
                 return True, query
@@ -291,10 +290,20 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def webhook_handler(request: web.Request) -> web.Response:
     """Handle incoming Telegram webhook updates."""
-    update = Update.de_json(await request.json(), application.bot)
-    if update:
-        await application.process_update(update)
-    return web.Response(status=200)
+    logger.info("Received webhook request from Telegram")
+    try:
+        data = await request.json()
+        logger.info(f"Webhook data received: {data}")
+        update = Update.de_json(data, application.bot)
+        if update:
+            logger.info(f"Processing update: {update}")
+            await application.process_update(update)
+        else:
+            logger.warning("No valid update received in webhook")
+        return web.Response(status=200)
+    except Exception as e:
+        logger.error(f"Webhook handler error: {e}")
+        return web.Response(status=500)
 
 async def setup_webhook(app: Application) -> None:
     """Set up Telegram webhook."""
@@ -311,7 +320,7 @@ async def setup_webhook(app: Application) -> None:
 async def start_webhook_server(app: Application) -> None:
     """Start the webhook server."""
     web_app = web.Application()
-    web_app.router.add_post('/telegram', webhook_handler)
+    web_app.router.add_post('/telegram', webhook_handler)  # Ensure endpoint is /telegram
 
     runner = web.AppRunner(web_app)
     await runner.setup()
@@ -320,7 +329,7 @@ async def start_webhook_server(app: Application) -> None:
 
     logger.info(f"Starting webhook server on port {CONFIG['WEBHOOK_PORT']}")
 
-    # Keep the server running indefinitely
+    # Keep the server running
     await asyncio.Event().wait()
 
 async def main() -> None:
