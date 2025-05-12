@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
@@ -33,6 +34,7 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'timeout': 600,  # 10 minuta timeout
     }
 
     try:
@@ -81,6 +83,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         'quiet': True,
         'skip_download': True,
         'default_search': 'ytsearch1',
+        'timeout': 600,  # 10 minut
     }
 
     try:
@@ -112,7 +115,9 @@ def main() -> None:
 
     while retry_count < retry_limit:
         try:
+            # Timeout parametrini oshirish
             application = ApplicationBuilder().token(BOT_TOKEN).build()
+            application._timeout = 120  # 2 minut, ehtimol kerakli
 
             application.add_handler(CommandHandler("start", start))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
