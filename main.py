@@ -1,16 +1,26 @@
 import logging
 import os
-import time
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from yt_dlp import YoutubeDL
 
+# .env faylini yuklash
+load_dotenv()
+
+# Tokenni .env faylidan olish
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+if not BOT_TOKEN:
+    print("❌ Bot tokeni topilmadi. Iltimos, .env faylini to'g'ri sozlang.")
+    exit(1)
+
+# Logging sozlamalari
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
 
 async def download_youtube_audio(video_id: str, filename: str) -> bool:
     url = f"https://www.youtube.com/watch?v={video_id}"
@@ -28,11 +38,10 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        return os.path.exists(f"{filename}.mp3")
+        return True
     except Exception as e:
-        logger.error("Error downloading audio", exc_info=True)
+        logger.error(f"Error downloading audio for video_id {video_id}: {str(e)}")
         return False
-
 
 async def send_file(update: Update, file_path: str, title: str) -> bool:
     try:
@@ -48,7 +57,6 @@ async def send_file(update: Update, file_path: str, title: str) -> bool:
         logger.error("Failed to send audio", exc_info=True)
         return False
 
-
 async def process_youtube_download(update: Update, msg, video_id: str, filename: str, title: str) -> None:
     logger.info(f"Downloading YouTube audio: {video_id} - {title}")
 
@@ -60,7 +68,6 @@ async def process_youtube_download(update: Update, msg, video_id: str, filename:
             await msg.delete()
     else:
         await msg.edit_text("❌ Audio yuklashda xato yuz berdi.")
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.message.text.strip()
@@ -95,20 +102,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.error("Search failed", exc_info=True)
         await msg.edit_text("❌ Qo‘shiq topilmadi.")
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🎵 Salom! Menga qo‘shiq nomini yoki YouTube linkini yuboring, men sizga MP3 yuboraman.")
 
-
 def main() -> None:
-    BOT_TOKEN = os.getenv("BOT_TOKEN")
-    if not BOT_TOKEN:
-        logger.error("Bot token not found. Please set the BOT_TOKEN environment variable.")
-        return
-
     retry_count = 0
     retry_limit = 5
-    retry_delay = 5
+    retry_delay = 5  # sekund
 
     while retry_count < retry_limit:
         try:
