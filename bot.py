@@ -1,10 +1,10 @@
+
 import os
 import re
 import logging
 import html
 import aiofiles
 import asyncio
-import subprocess
 from uuid import uuid4
 from typing import Tuple, Optional
 from telegram import Update
@@ -296,21 +296,36 @@ async def webhook_handler(request: web.Request) -> web.Response:
         await application.process_update(update)
     return web.Response(status=200)
 
-def setup_webhook(application: Application) -> None:
+async def setup_webhook(app: Application) -> None:
     """Set up Telegram webhook."""
     try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(application.bot.set_webhook(
+        await app.bot.set_webhook(
             url=f"{CONFIG['WEBHOOK_URL']}/telegram",
             allowed_updates=Update.ALL_TYPES
-        ))
+        )
         logger.info(f"Webhook set to {CONFIG['WEBHOOK_URL']}/telegram")
     except Exception as e:
         logger.error(f"Failed to set webhook: {e}")
         raise
 
-def main() -> None:
+async def start_webhook_server(app: Application) -> None:
+    """Start the webhook server."""
+    web_app = web.Application()
+    web_app.router.add_post('/telegram', webhook_handler)
+
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', CONFIG['WEBHOOK_PORT'])
+    await site.start()
+
+    logger.info(f"Starting webhook server on port {CONFIG['WEBHOOK_PORT']}")
+
+    # Keep the server running indefinitely
+    await asyncio.Event().wait()
+
+async def main() -> None:
     """Run the bot with webhook."""
+    global application
     application = (
         Application.builder()
         .token(CONFIG['TELEGRAM_TOKEN'])
@@ -325,13 +340,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_media))
     application.add_error_handler(error_handler)
 
-    setup_webhook(application)
-
-    web_app = web.Application()
-    web_app.router.add_post('/telegram', webhook_handler)
-
-    logger.info(f"Starting webhook server on port {CONFIG['WEBHOOK_PORT']}")
-    web.run_app(web_app, port=CONFIG['WEBHOOK_PORT'])
+    await setup_webhook(application)
+    await start_webhook_server(application)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
