@@ -1,57 +1,35 @@
 import logging
-import boto3
 import json
-from aiogram import Bot, Dispatcher, executor, types
+from aiogram import Bot, Dispatcher, types
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import asyncio
 
-# Logging sozlamalari (CloudWatch uchun moslashtirilgan)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# AWS Secrets Manager'dan ma'lumotlarni olish
-def get_secrets():
-    session = boto3.session.Session()
-    client = session.client('secretsmanager', region_name='us-east-1')  # O'zingizning regioningizni kiriting
-    try:
-        secret = client.get_secret_value(SecretId='music_bot_secrets')
-        return json.loads(secret['SecretString'])
-    except Exception as e:
-        logger.error(f"Secrets Manager xatoligi: {e}")
-        raise ValueError("Secrets Manager'dan ma'lumot olishda xato!")
+TELEGRAM_TOKEN = 'SIZNING_TOKENIZ'  # Tokeningizni shu yerga kiriting
 
-secrets = get_secrets()
-TELEGRAM_TOKEN = secrets['TELEGRAM_TOKEN']
-YOUTUBE_API_KEY = secrets['YOUTUBE_API_KEY']
+YOUTUBE_API_KEY = 'YOUTUBE_API_KEY_HERE'  # Bu yerga YouTube API kalitini yozing
 
-# Token va API kalitini tekshirish
-if not TELEGRAM_TOKEN or not YOUTUBE_API_KEY:
-    logger.error("TELEGRAM_TOKEN yoki YOUTUBE_API_KEY topilmadi!")
-    raise ValueError("TELEGRAM_TOKEN va YOUTUBE_API_KEY sozlanmagan!")
-
-# Botni ishga tushirish
 bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
-# YouTube API bilan ulanish
 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
 
-# /start buyrug'i uchun handler
-@dp.message_handler(commands=['start'])
+@dp.message_command('start')
 async def send_welcome(message: types.Message):
     logger.info(f"Foydalanuvchi {message.from_user.id} /start buyrug'ini yubordi")
     await message.reply("Salom! Men musiqa botiman. Musiqa nomini yuboring, men sizga YouTube'dan havola topib beraman!")
 
-# Matnli xabarlar uchun handler
-@dp.message_handler()
+@dp.message()
 async def search_music(message: types.Message):
     query = message.text
     logger.info(f"Foydalanuvchi {message.from_user.id} qidiruv so'rovi: {query}")
     try:
-        # YouTube'da qidiruv
         request = youtube.search().list(
             part="snippet",
             maxResults=1,
@@ -60,7 +38,6 @@ async def search_music(message: types.Message):
         )
         response = request.execute()
 
-        # Natijalarni olish
         if response['items']:
             video_id = response['items'][0]['id']['videoId']
             video_title = response['items'][0]['snippet']['title']
@@ -77,7 +54,9 @@ async def search_music(message: types.Message):
         logger.error(f"Umumiy xatolik: {e}")
         await message.reply("Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
-# Botni ishga tushirish
+async def main():
+    await dp.start_polling()
+
 if __name__ == '__main__':
     logger.info("Bot ishga tushmoqda...")
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
