@@ -1,34 +1,35 @@
-
 import os
 import re
 import logging
 import html
-import importlib
 import aiofiles
 import asyncio
 import subprocess
 from uuid import uuid4
 from typing import Tuple, Optional
-from telegram import Update, __version__ as TELEGRAM_VERSION
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.error import Forbidden, TimedOut, RetryAfter
-import googleapiclient.discovery
 import yt_dlp
 import instaloader
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 from dotenv import load_dotenv
+from aiohttp import web
 
 # Configuration
 load_dotenv()
 CONFIG = {
-    'YOUTUBE_API_KEY': os.getenv('YOUTUBE_API_KEY'),
     'TELEGRAM_TOKEN': os.getenv('TELEGRAM_TOKEN'),
-    'API_SERVICE_NAME': 'youtube',
-    'API_VERSION': 'v3',
-    'MP3_BITRATE': '96',  # Lowered for smaller files
-    'MAX_FILE_SIZE_MB': 20,  # Threshold for compression
+    'SPOTIFY_CLIENT_ID': os.getenv('SPOTIFY_CLIENT_ID'),
+    'SPOTIFY_CLIENT_SECRET': os.getenv('SPOTIFY_CLIENT_SECRET'),
+    'WEBHOOK_URL': os.getenv('WEBHOOK_URL'),  # e.g., https://your-domain.com
+    'WEBHOOK_PORT': int(os.getenv('WEBHOOK_PORT', 8443)),
+    'MP3_BITRATE': '96',
+    'MAX_FILE_SIZE_MB': 20,
     'MAX_RETRIES': 3,
     'RETRY_DELAY': 2,
-    'REQUEST_TIMEOUT': 60,  # Used for Application-level timeouts
+    'REQUEST_TIMEOUT': 60,
     'INSTALOADER_TIMEOUT': 30,
     'ALLOWED_EXTENSIONS': ['webm', 'm4a', 'mp3'],
 }
@@ -42,18 +43,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Validate environment variables
-if not all([CONFIG['YOUTUBE_API_KEY'], CONFIG['TELEGRAM_TOKEN']]):
-    logger.error("Missing YOUTUBE_API_KEY or TELEGRAM_TOKEN in .env file")
-    raise ValueError("API keys or token not configured")
+if not all([CONFIG['TELEGRAM_TOKEN'], CONFIG['SPOTIFY_CLIENT_ID'], CONFIG['SPOTIFY_CLIENT_SECRET'], CONFIG['WEBHOOK_URL']]):
+    logger.error("Missing TELEGRAM_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, or WEBHOOK_URL in .env")
+    raise ValueError("Required environment variables not configured")
 
-# YouTube API client
+# Spotify API client
 try:
-    youtube = googleapiclient.discovery.build(
-        CONFIG['API_SERVICE_NAME'], CONFIG['API_VERSION'],
-        developerKey=CONFIG['YOUTUBE_API_KEY'], cache_discovery=False
-    )
+    sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+        client_id=CONFIG['SPOTIFY_CLIENT_ID'],
+        client_secret=CONFIG['SPOTIFY_CLIENT_SECRET']
+    ))
 except Exception as e:
-    logger.error(f"Failed to initialize YouTube API: {e}")
+    logger.error(f"Failed to initialize Spotify API: {e}")
     raise
 
 # Instaloader setup
@@ -65,10 +66,9 @@ instaloader_instance = instaloader.Instaloader(
 )
 
 def clean_title(title: str) -> str:
-    """Clean YouTube or Instagram title for Telegram."""
+    """Clean title for Telegram."""
     if not title:
         return "Media"
-
     title = html.unescape(title)
     patterns = [
         r'\s*\(Official (Music )?Video\).*',
@@ -78,7 +78,6 @@ def clean_title(title: str) -> str:
     ]
     for pattern in patterns:
         title = re.sub(pattern, '', title, flags=re.IGNORECASE)
-
     title = re.sub(r'\s+', ' ', title).strip() or "Media"
     artist, song = (title.split(" - ", 1) if " - " in title else ("", title))
     song = song.replace("'", "'")[:256]
@@ -91,11 +90,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_text(
         f"Salom, {user.first_name}!\n"
-        "Qo'shiq nomini (masalan: Hamdam Sobirov - Tentakcham) yoki YouTube/Instagram havolasini yuboring."
+        "Qo'shiq nomini (masalan: Hamdam Sobirov - Tentakcham) yoki Instagram havolasini yuboring."
     )
 
-async def download_youtube_audio(video_id: str, filename: str) -> bool:
-    """Download audio from YouTube and optimize file size."""
+async def download_youtube_audio(query: str, filename: str) -> Tuple[bool, str]:
+    """Download audio from YouTube using search query."""
     ydl_opts = {
         'format': 'bestaudio',
         'outtmpl': f'{filename}.%(ext)s',
@@ -110,15 +109,13 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-
+            ydl.download([f"ytsearch:{query}"])
         for ext in CONFIG['ALLOWED_EXTENSIONS']:
             path = f"{filename}.{ext}"
             if os.path.exists(path):
                 os.rename(path, f"{filename}.mp3")
                 file_size = os.path.getsize(f"{filename}.mp3") / (1024 * 1024)
                 logger.info(f"Downloaded MP3 size: {file_size:.2f} MB")
-
                 if file_size > CONFIG['MAX_FILE_SIZE_MB']:
                     logger.info("Compressing oversized file...")
                     new_filename = f"{filename}_compressed.mp3"
@@ -129,23 +126,21 @@ async def download_youtube_audio(video_id: str, filename: str) -> bool:
                     os.rename(new_filename, f"{filename}.mp3")
                     file_size = os.path.getsize(f"{filename}.mp3") / (1024 * 1024)
                     logger.info(f"Compressed MP3 size: {file_size:.2f} MB")
-                return True
-        return False
+                return True, query
+        return False, ""
     except Exception as e:
         logger.error(f"YouTube download error: {e}")
-        return False
+        return False, ""
 
 async def download_instagram_media(post_url: str, filename: str) -> Tuple[bool, str, str]:
-    """Download video from Instagram."""
+    """ NOVALIDATE Download video from Instagram."""
     try:
         shortcode = post_url.split("/")[-2]
         post = instaloader.Post.from_shortcode(instaloader_instance.context, shortcode)
         instaloader_instance.download_post(post, target=filename)
-
         caption = clean_title(post.caption or post.owner_username or "Instagram Reel")[:100]
         files = os.listdir(filename)
         mp4_files = [f for f in files if f.endswith('.mp4')]
-
         if mp4_files:
             video_path = os.path.join(filename, mp4_files[0])
             file_size = os.path.getsize(video_path) / (1024 * 1024)
@@ -163,28 +158,20 @@ async def download_instagram_media(post_url: str, filename: str) -> Tuple[bool, 
         logger.error(f"Instagram download error: {e}")
         return False, "", ""
 
-async def search_youtube(query: str) -> Tuple[str, str]:
-    """Search YouTube for a song."""
+async def search_spotify(query: str) -> Tuple[str, str]:
+    """Search Spotify for a song."""
     try:
-        request = youtube.search().list(part="snippet", q=query, type="video", maxResults=1)
-        response = request.execute()
-        if response.get("items"):
-            item = response["items"][0]
-            return item["id"]["videoId"], clean_title(item["snippet"]["title"])
+        results = sp.search(q=query, type='track', limit=1)
+        if results['tracks']['items']:
+            track = results['tracks']['items'][0]
+            artist = track['artists'][0]['name']
+            title = track['name']
+            full_title = f"{artist} - {title}"
+            return clean_title(full_title), f"{artist} {title}"
         return "", ""
     except Exception as e:
-        logger.error(f"YouTube search error: {e}")
+        logger.error(f"Spotify search error: {e}")
         return "", ""
-
-async def get_youtube_title(video_id: str) -> str:
-    """Fetch YouTube video title."""
-    try:
-        request = youtube.videos().list(part="snippet", id=video_id)
-        response = request.execute()
-        return clean_title(response["items"][0]["snippet"]["title"]) if response.get("items") else "Unknown Title"
-    except Exception as e:
-        logger.error(f"YouTube title fetch error: {e}")
-        return "Unknown Title"
 
 async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process user media request."""
@@ -194,27 +181,16 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         await update.message.reply_text("🔎 Qidirilmoqda...")
 
-        if "youtube.com" in query or "youtu.be" in query:
-            video_id = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", query)
-            if not video_id:
-                await update.message.reply_text("❌ Invalid YouTube link!")
-                return
-            video_id = video_id.group(1)
-            title = await get_youtube_title(video_id)
-            await update.message.reply_text(f"⬇️ Yuklanmoqda: {title}")
-            await process_youtube_download(update, video_id, filename, title)
-
-        elif "instagram.com" in query:
+        if "instagram.com" in query:
             await update.message.reply_text("⬇️ Instagram'dan yuklanmoqda...")
             await process_instagram_download(update, query, filename)
-
         else:
-            video_id, title = await search_youtube(query)
-            if not video_id:
+            title, youtube_query = await search_spotify(query)
+            if not title:
                 await update.message.reply_text("❌ Nothing found. Try another query.")
                 return
             await update.message.reply_text(f"⬇️ Yuklanmoqda: {title}")
-            await process_youtube_download(update, video_id, filename, title)
+            await process_youtube_download(update, youtube_query, filename, title)
 
     except Exception as e:
         logger.error(f"Media processing error: {e}")
@@ -223,9 +199,10 @@ async def process_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     finally:
         cleanup_files(filename)
 
-async def process_youtube_download(update: Update, video_id: str, filename: str, title: str) -> None:
+async def process_youtube_download(update: Update, youtube_query: str, filename: str, title: str) -> None:
     """Handle YouTube audio download and upload."""
-    if await download_youtube_audio(video_id, filename):
+    success, _ = await download_youtube_audio(youtube_query, filename)
+    if success:
         for attempt in range(CONFIG['MAX_RETRIES']):
             try:
                 async with aiofiles.open(f"{filename}.mp3", 'rb') as audio:
@@ -255,7 +232,6 @@ async def process_youtube_download(update: Update, video_id: str, filename: str,
 async def process_instagram_download(update: Update, post_url: str, filename: str) -> None:
     """Handle Instagram video download and upload."""
     success, video_path, caption = await download_instagram_media(post_url, filename)
-
     if success and video_path.endswith('.mp4'):
         for attempt in range(CONFIG['MAX_RETRIES']):
             try:
@@ -300,7 +276,6 @@ def cleanup_files(filename: str) -> None:
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle bot errors."""
     logger.error(f"Error occurred: {context.error}")
-
     if isinstance(context.error, Forbidden):
         logger.warning("Bot blocked by user.")
         return
@@ -314,72 +289,49 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update and update.message:
         await update.message.reply_text("❌ Bot error. Please try again later.")
 
-def verify_dependencies() -> list:
-    """Check for required dependencies and library version."""
-    required = [
-        ('python-telegram-bot', 'telegram'),
-        ('google-api-python-client', 'googleapiclient'),
-        ('yt-dlp', 'yt_dlp'),
-        ('instaloader', 'instaloader'),
-        ('aiofiles', 'aiofiles'),
-        ('python-dotenv', 'dotenv')
-    ]
-    missing = []
-    for pkg, mod in required:
-        try:
-            importlib.import_module(mod)
-        except ImportError as e:
-            logger.error(f"Missing {pkg}: {e}")
-            missing.append(pkg)
+async def webhook_handler(request: web.Request) -> web.Response:
+    """Handle incoming Telegram webhook updates."""
+    update = Update.de_json(await request.json(), application.bot)
+    if update:
+        await application.process_update(update)
+    return web.Response(status=200)
 
-    # Check python-telegram-bot version
-    if TELEGRAM_VERSION < "20.0":
-        logger.warning(
-            f"python-telegram-bot version {TELEGRAM_VERSION} detected. "
-            "Consider upgrading to v20.0+ for better timeout control: pip install python-telegram-bot --upgrade"
-        )
-
-    return missing
+def setup_webhook(application: Application) -> None:
+    """Set up Telegram webhook."""
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(application.bot.set_webhook(
+            url=f"{CONFIG['WEBHOOK_URL']}/telegram",
+            allowed_updates=Update.ALL_TYPES
+        ))
+        logger.info(f"Webhook set to {CONFIG['WEBHOOK_URL']}/telegram")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise
 
 def main() -> None:
-    """Run the bot."""
-    if missing := verify_dependencies():
-        logger.error(f"Missing dependencies: {', '.join(missing)}")
-        logger.error("Install them with: pip install -r requirements.txt")
-        return
+    """Run the bot with webhook."""
+    application = (
+        Application.builder()
+        .token(CONFIG['TELEGRAM_TOKEN'])
+        .read_timeout(CONFIG['REQUEST_TIMEOUT'])
+        .write_timeout(CONFIG['REQUEST_TIMEOUT'])
+        .connect_timeout(30)
+        .pool_timeout(60)
+        .build()
+    )
 
-    for attempt in range(CONFIG['MAX_RETRIES']):
-        try:
-            application = (
-                Application.builder()
-                .token(CONFIG['TELEGRAM_TOKEN'])
-                .read_timeout(CONFIG['REQUEST_TIMEOUT'])
-                .write_timeout(CONFIG['REQUEST_TIMEOUT'])
-                .connect_timeout(30)
-                .pool_timeout(60)
-                .get_updates_read_timeout(CONFIG['REQUEST_TIMEOUT'])
-                .get_updates_write_timeout(CONFIG['REQUEST_TIMEOUT'])
-                .get_updates_connect_timeout(30)
-                .get_updates_pool_timeout(60)
-                .build()
-            )
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_media))
+    application.add_error_handler(error_handler)
 
-            application.add_handler(CommandHandler("start", start))
-            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_media))
-            application.add_error_handler(error_handler)
+    setup_webhook(application)
 
-            logger.info("Bot started...")
-            application.run_polling(allowed_updates=Update.ALL_TYPES)
-            return
+    web_app = web.Application()
+    web_app.router.add_post('/telegram', webhook_handler)
 
-        except TimeoutError as e:
-            logger.error(f"Timeout error ({attempt + 1}/{CONFIG['MAX_RETRIES']}): {e}")
-            if attempt < CONFIG['MAX_RETRIES'] - 1:
-                logger.info(f"Retrying in {CONFIG['RETRY_DELAY']}s...")
-                time.sleep(CONFIG['RETRY_DELAY'])
-        except Exception as e:
-            logger.error(f"Startup error: {e}")
-            return
+    logger.info(f"Starting webhook server on port {CONFIG['WEBHOOK_PORT']}")
+    web.run_app(web_app, port=CONFIG['WEBHOOK_PORT'])
 
 if __name__ == "__main__":
     main()
