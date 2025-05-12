@@ -133,7 +133,7 @@ async def download_youtube_audio(query: str, filename: str) -> Tuple[bool, str]:
         return False, ""
 
 async def download_instagram_media(post_url: str, filename: str) -> Tuple[bool, str, str]:
-    """ NOVALIDATE Download video from Instagram."""
+    """Download video from Instagram."""
     try:
         shortcode = post_url.split("/")[-2]
         post = instaloader.Post.from_shortcode(instaloader_instance.context, shortcode)
