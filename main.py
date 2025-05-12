@@ -1,8 +1,6 @@
 import logging
 import os
 import asyncio
-from datetime import time
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from yt_dlp import YoutubeDL
