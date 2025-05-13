@@ -21,6 +21,8 @@ async def command_start_handler(message: Message) -> None:
 
     await message.answer(f"Salom, {html.bold(message.from_user.full_name)}!")
 
+@dp.message(F.text=="start")
+
 
 @dp.message()
 async def echo_handler(message: Message) -> None:
