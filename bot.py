@@ -318,9 +318,8 @@ async def setup_webhook(app: Application) -> None:
         raise
 
 async def start_webhook_server(app: Application) -> None:
-    """Start the webhook server."""
     web_app = web.Application()
-    web_app.router.add_post('/telegram', webhook_handler)  # Ensure endpoint is /telegram
+    web_app.router.add_post('/telegram', webhook_handler)  # Endpoint /telegram
 
     runner = web.AppRunner(web_app)
     await runner.setup()
@@ -328,8 +327,6 @@ async def start_webhook_server(app: Application) -> None:
     await site.start()
 
     logger.info(f"Starting webhook server on port {CONFIG['WEBHOOK_PORT']}")
-
-    # Keep the server running
     await asyncio.Event().wait()
 
 async def main() -> None:
