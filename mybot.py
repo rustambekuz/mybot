@@ -6,7 +6,7 @@ from os import getenv
 from aiogram import Bot, Dispatcher, html, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from dotenv import load_dotenv
 
@@ -21,7 +21,7 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
 
-    await message.answer(f"Salom, {html.bold(message.from_user.full_name)}!")
+    await message.answer(f"<i>Salom</i>, {html.bold(message.from_user.full_name)}!")
     # await message.answer("Tug'ilgan yilingizni kiriting men yoshingizni aytaman!")
     # await message.answer("Yoshingizni kiriting men sizga tug'ilgan yilingizni aytaman!")
 
@@ -42,38 +42,38 @@ async def command_start_handler(message: Message) -> None:
 # async def check_date(message: Message):
 #     await message.answer("Sizdan date formatda malumot keldi!")
 
-import emoji
-@dp.message()
-async def handle_all(message:Message):
-    if message.text:
-        if emoji.is_emoji(message.text):
-            await message.answer("bu emoji!")
-        else:
-            await message.answer("bu matn!")
-
-    elif message.photo:
-        await message.answer("bu foto!")
-
-    elif message.document:
-        await message.answer("bu document!")
-
-    elif message.audio:
-        await message.answer("bu audio!")
-
-    elif message.video:
-        await message.answer("bu video!")
-
-    elif message.sticker:
-        await message.answer("bu sticker!")
-
-    elif message.voice:
-        await message.answer("siz ovozli habar yubordingiz!")
-
-    elif message.animation:
-        await message.answer("bu animation!")
-
-    else:
-        await message.answer("boshqa turdagi habar!")
+# import emoji
+# @dp.message()
+# async def handle_all(message:Message):
+#     if message.text:
+#         if emoji.is_emoji(message.text):
+#             await message.answer("bu emoji!")
+#         else:
+#             await message.answer("bu matn!")
+#
+#     elif message.photo:
+#         await message.answer("bu foto!")
+#
+#     elif message.document:
+#         await message.answer("bu document!")
+#
+#     elif message.audio:
+#         await message.answer("bu audio!")
+#
+#     elif message.video:
+#         await message.answer("bu video!")
+#
+#     elif message.sticker:
+#         await message.answer("bu sticker!")
+#
+#     elif message.voice:
+#         await message.answer("siz ovozli habar yubordingiz!")
+#
+#     elif message.animation:
+#         await message.answer("bu animation!")
+#
+#     else:
+#         await message.answer("boshqa turdagi habar!")
 
 
 
@@ -105,6 +105,21 @@ async def handle_all(message:Message):
 #             await message.answer("Iltimos, sanani DD-MM-YYYY formatda yuboring.")
 #     else:
 #         await message.answer("Iltimos, sanani DD-MM-YYYY formatda yuboring.")
+
+
+# @dp.message(Command("help"))
+# async def command_help_handler(message: Message) -> None:
+#     await message.reply("/help ishga tushdi!")
+
+
+@dp.message(F.location)
+async def get_location(message: Message):
+    await message.reply(f"Siz lakatsiya yubordingiz!\nlatitude:{message.location.latitude}\n"
+                         f"longitude:{message.location.longitude}")
+
+
+
+
 
 # @dp.message(F.text.regexp(r'^\d{1,3}$'))
 # async def get_age_from_year(message: Message):
