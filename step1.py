@@ -33,7 +33,7 @@ async def command_start_handler(message: Message, state:FSMContext) -> None:
     chat_id = str(message.chat.id)
 
     if await user_exists(chat_id):
-        await message.answer("bu foydalanuvchi mavjud!")
+        await message.answer(f"Salom {message.from_user.full_name}!, siz allaqachon ro'yxatdan o'tgansz!")
         return
 
     await state.set_state(Registrator.fullname)
