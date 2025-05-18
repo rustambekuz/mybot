@@ -47,21 +47,19 @@ async def command_start_handler(message: Message, state:FSMContext) -> None:
 @dp.message(Command("play"))
 async def play_handler(message: Message, state:FSMContext) -> None:
     await state.set_state(Quiz.confirmation)
-    await message.answer(f"Test ishlaysizmi? Savollar soni {len(all_questions)}", reply_markup=make_keyboards(["Yes", "No"]))
+    await message.answer(f"Test ishlaysizmi?\nSavollar soni {len(all_questions)} ta.", reply_markup=make_keyboards(["Yes", "No"]))
 
-@dp.message()
 @dp.message(Quiz.confirmation)
 async def confirmation_handler(message: Message, state:FSMContext) -> None:
     if message.text=='Yes':
         await state.set_state(Quiz.asking_question)
         await state.update_data(step=0,score=0,total=len(all_questions))
-        question=all_questions[0]
-        await message.answer(question.text, reply_markup=make_keyboards(question.options))
+        question = all_questions[0]
+
+        await message.answer(f"1-savol\n{question.text}", reply_markup=make_keyboards(question.options))
     else:
         await state.clear()
         await message.answer("Testni boshlash uchun /play ni bosing!", reply_markup=ReplyKeyboardRemove())
-
-
 
 @dp.message(Quiz.asking_question)
 async def asking_question_handler(message: Message, state:FSMContext) -> None:
@@ -79,14 +77,20 @@ async def asking_question_handler(message: Message, state:FSMContext) -> None:
     step+=1
 
     if step>=total:
-        await message.answer(f"Test tugadi\nTo'g'ri javoblar soni: {score}/{total}!", reply_markup=ReplyKeyboardRemove())
+        await message.answer(f"Test tugadi\n"
+                             f"{html.bold(message.from_user.full_name)}!, sizning test natijangiz quyidagicha\n"
+                             f"To'g'ri javoblar {score}/{total}!", reply_markup=ReplyKeyboardRemove())
         await state.clear()
     else:
-        await state.update_data(step=step,score=score)
-        next_question=all_questions[step]
-        await message.answer(next_question.text, reply_markup=make_keyboards(next_question.options))
-
-
+        await state.update_data(step=step, score=score)
+        next_question = all_questions[step]
+        question_number = step + 1
+        await message.answer(f"{question_number}-savol\n{next_question.text}",
+                             reply_markup=make_keyboards(next_question.options))
+        
+@dp.message()
+async def default_message_handler(message: Message):
+    await message.answer("Salom, Rustambek!\nTest ishlash uchun /play ni bosing!")
 
 
 async def main() -> None:
@@ -95,5 +99,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
