@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from dotenv import load_dotenv
 
 from db import user_exists, insert_user
@@ -22,10 +23,18 @@ TOKEN = getenv("BOT_TOKEN")
 
 dp = Dispatcher(storage=MemoryStorage())
 
-class Registrator(StatesGroup):
+class Register(StatesGroup):
     fullname=State()
     phone=State()
     address=State()
+
+keyboard = [
+    [KeyboardButton(text="shere contact", request_contact=True)]
+]
+
+kb_markup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
 
 
 @dp.message(CommandStart())
@@ -33,35 +42,35 @@ async def command_start_handler(message: Message, state:FSMContext) -> None:
     chat_id = str(message.chat.id)
 
     if await user_exists(chat_id):
-        await message.answer(f"Salom {message.from_user.full_name}!, siz allaqachon ro'yxatdan o'tgansz!")
+        await message.answer(f"Salom {message.from_user.full_name}, siz allaqachon ro'yxatdan o'tgansz!")
         return
 
-    await state.set_state(Registrator.fullname)
-    await message.answer("Ism-Familiyangizni kiriting!: ")
+    await state.set_state(Register.fullname)
+    await message.answer("👨‍🦰 Ism-Familiyangizni kiriting!: ")
 
-@dp.message(Registrator.fullname)
+@dp.message(Register.fullname)
 async def fullname_handler(message: Message, state:FSMContext) -> None:
     await state.update_data(fullname=message.text)
-    await state.set_state(Registrator.phone)
-    await message.answer("Telefon raqamingizni kiriting:")
+    await state.set_state(Register.phone)
+    await message.answer("📲 Telefon raqamingizni kiriting", reply_markup=kb_markup)
 
-@dp.message(Registrator.phone)
+@dp.message(Register.phone)
 async def phone_handler(message: Message, state:FSMContext) -> None:
     await state.update_data(phone=message.text)
     await state.update_data(chat_id=str(message.chat.id))
-    await state.set_state(Registrator.address)
+    await state.set_state(Register.address)
     await message.answer("Manzil raqamingizni kiriting:")
 
 
 
-@dp.message(Registrator.address)
+@dp.message(Register.address)
 async def address_handler(message: Message, state:FSMContext) -> None:
     await state.update_data(address=message.text)
     data = await state.get_data()
     chat_id = data['chat_id']
 
     if await user_exists(chat_id):
-        await message.answer("Siz allaqachon ro'yxatdan o'tgansz!")
+        await message.answer(f"Salom! {html.bold(message.from_user.full_name)}, siz allaqachon ro'yxatdan o'tgansz")
     else:
         await insert_user(
             chat_id=chat_id,
@@ -69,7 +78,7 @@ async def address_handler(message: Message, state:FSMContext) -> None:
             phone=data['phone'],
             address=data['address']
         )
-        await message.answer("Malumotlaringiz databasega saqlandi!")
+        await message.answer("🎉 Siz muvofaqqiyatli ro'yxatdan o'tdingiz!", reply_markup=ReplyKeyboardRemove())
 
     await state.clear()
 
