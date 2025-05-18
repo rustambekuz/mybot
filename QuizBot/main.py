@@ -23,6 +23,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 class Quiz(StatesGroup):
     confirmation = State()
+    choosing_category = State()
     asking_question = State()
 
 all_questions = get_questions_from_db()
@@ -37,7 +38,7 @@ def make_keyboards(options, row=2):
 
 
 @dp.message(CommandStart())
-async def command_start_handler(message: Message, state:FSMContext) -> None:
+async def command_start_handler(message: Message) -> None:
     await message.answer(
         f"Salom, {html.bold(message.from_user.full_name)}!\n"
         f"Test ishlash uchun /play ni bosing!",
@@ -47,32 +48,46 @@ async def command_start_handler(message: Message, state:FSMContext) -> None:
 @dp.message(Command("play"))
 async def play_handler(message: Message, state:FSMContext) -> None:
     await state.set_state(Quiz.confirmation)
-    await message.answer(f"Test ishlaysizmi?\nSavollar soni {len(all_questions)} ta.", reply_markup=make_keyboards(["Yes", "No"]))
+    await message.answer("Test ishlaysizmi?", reply_markup=make_keyboards(["Yes", "No"]))
 
 @dp.message(Quiz.confirmation)
 async def confirmation_handler(message: Message, state:FSMContext) -> None:
     if message.text=='Yes':
-        await state.set_state(Quiz.asking_question)
-        await state.update_data(step=0,score=0,total=len(all_questions))
-        question = all_questions[0]
-
-        await message.answer(f"1-savol\n{question.text}", reply_markup=make_keyboards(question.options))
+        await state.set_state(Quiz.choosing_category)
+        await message.answer("Kategoriyani tanlang:", reply_markup=make_keyboards(['Math', 'Physics', 'English']))
     else:
         await state.clear()
         await message.answer("Testni boshlash uchun /play ni bosing!", reply_markup=ReplyKeyboardRemove())
 
+
+@dp.message(Quiz.choosing_category)
+async def category_handler(message: Message, state: FSMContext) -> None:
+    category=message.text
+    category_questions = [q for q in all_questions if q.category == category]
+    if not category_questions:
+        await message.answer("Kategoriyada savollar mavjud emas!")
+        return
+
+    await state.set_state(Quiz.asking_question)
+    await state.update_data(step=0, score=0, total=len(category_questions), questions=category_questions)
+    question=category_questions[0]
+    await message.answer(f"1-savol\n{question.text}", reply_markup=make_keyboards(question.options))
+
+
 @dp.message(Quiz.asking_question)
 async def asking_question_handler(message: Message, state:FSMContext) -> None:
     data=await state.get_data()
-    step=data['step']
-    score=data['score']
-    total=data['total']
-    correct_question=all_questions[step]
+    step=data.get('step')
+    score=data.get('score')
+    total=data.get('total')
+    questions = data.get('questions')
+
+    correct_question = questions[step]
     if message.text==correct_question.correct_answer:
-        await message.answer("✅ To'g'ri!")
+        await message.reply("✅ To'g'ri!")
         score+=1
     else:
-        await message.answer("❌ Noto'g'ri!")
+        await message.reply("❌ Noto'g'ri!")
 
     step+=1
 
@@ -83,9 +98,8 @@ async def asking_question_handler(message: Message, state:FSMContext) -> None:
         await state.clear()
     else:
         await state.update_data(step=step, score=score)
-        next_question = all_questions[step]
-        question_number = step + 1
-        await message.answer(f"{question_number}-savol\n{next_question.text}",
+        next_question = questions[step]
+        await message.answer(f"{step+1}-savol\n{next_question.text}",
                              reply_markup=make_keyboards(next_question.options))
         
 @dp.message()
