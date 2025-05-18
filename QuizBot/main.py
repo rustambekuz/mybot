@@ -15,9 +15,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from dotenv import load_dotenv
 from dbquiz import get_questions_from_db, Question
+from db_users import get_all_user_ids, save_user_if_not_exists
 
 load_dotenv()
 TOKEN = getenv("BOT_TOKEN")
+bot=Bot(token=TOKEN)
 
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -39,11 +41,43 @@ def make_keyboards(options, row=2):
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
+    user_id = message.from_user.id
+    full_name = message.from_user.full_name
+    username = message.from_user.username or "no_username"
+    await save_user_if_not_exists(user_id, full_name, username)
     await message.answer(
         f"Salom, {html.bold(message.from_user.full_name)}!\n"
         f"Test ishlash uchun /play ni bosing!",
         reply_markup=ReplyKeyboardRemove()
     )
+
+
+ADMIN_ID = 5556358782
+@dp.message(Command("notify"))
+async def notify_handler(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("Faqat admin yangilik yuborishi mumkin.")
+        return
+
+    users = await get_all_user_ids()
+    text = (
+        "📢 YANGILIK!\n\n"
+        "✅ Fizika va English testlari qo‘shildi\n"
+        "✅ Har bir kategoriya bo‘yicha testlar\n"
+        "✅ Natija yakunda chiqadi!\n\n"
+        "Yangi testlarni boshlash uchun /start ni bosing!"
+    )
+
+    count = 0
+    for user_id in users:
+        try:
+            await bot.send_message(user_id, text)
+            count += 1
+        except Exception as e:
+            print(f"Xatolik: {user_id} — {e}")
+
+    await message.answer(f"{count} ta foydalanuvchiga yuborildi.")
+
 
 @dp.message(Command("play"))
 async def play_handler(message: Message, state:FSMContext) -> None:
