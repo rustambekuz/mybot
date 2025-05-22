@@ -1,0 +1,10 @@
+{
+  "greeting": "Salom,",
+  "choose_language": "Iltimos, tilni tanlang:",
+  "change_language": "tilni o‘zgartirish",
+  "saved": "Til saqlandi ✅",
+  "selected_language": "✅ Tilingiz: {lang}",
+  "currency_info": "Valyuta kurslari (USD bazasida):",
+  "currency_not_found": "Valyuta topilmadi.",
+  "currency_example": "Misol uchun: /kurs EUR"
+}

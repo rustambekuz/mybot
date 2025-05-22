@@ -1,0 +1,10 @@
+{
+  "greeting": "Здравствуйте,",
+  "choose_language": "Пожалуйста, выберите язык:",
+  "change_language": "изменить язык",
+  "saved": "Язык сохранен ✅",
+  "selected_language": "✅ Ваш язык: {lang}",
+  "currency_info": "Курсы валют (на основе USD):",
+  "currency_not_found": "Валюта не найдена.",
+  "currency_example": "Например: /kurs EUR"
+}
