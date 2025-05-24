@@ -11,5 +11,5 @@ def three_languages():
         ]
     ]
 
-    uz_ru_en_kbs = InlineKeyboardMarkup(inline_keyboard=kbs)
+    uz_ru_en_kbs = InlineKeyboardMarkup(inline_keyboard=kbs, resize_keyboard=True)
     return uz_ru_en_kbs
