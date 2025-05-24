@@ -87,8 +87,7 @@ async def send_question(message: Message, state: FSMContext):
 
     markup = ReplyKeyboardMarkup(
         keyboard=keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=True
+        resize_keyboard=True
     )
 
     await message.answer(f"{index + 1}-savol:\n\n{question_text}", reply_markup=markup)
