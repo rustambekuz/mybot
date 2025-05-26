@@ -19,6 +19,11 @@ class StartTestCallbackFactory(CallbackData, prefix="starttest"):
     category: str
 
 
+class AnswerCallbackFactory(CallbackData, prefix="answer"):
+    index: int
+    selected_option: str
+
+
 
 from aiogram.fsm.state import State, StatesGroup
 
@@ -31,13 +36,17 @@ subjects = {
     "matematika": ["Algebra", "Geometriya", "Matematika test"],
     "fizika": ["Mexanika", "Optika", "Termodinamika"],
     "english": ["Grammar", "Vocabulary", "Listening"],
-    "kimyo": ["Organik", "Anorganik", "Analitik"],
-    "biologiya": ["Botanika", "Zoologiya", "Genetika"],
-    "geografiya": ["Materiklar", "Iqlim", "Xaritalar"],
-    "tarix": ["Jahon tarixi", "O‘zbekiston tarixi", "Qadimgi dunyo"],
-    "adabiyot": ["She’riyat", "Nasr", "Adabiy tahlil"],
-    "ona_tili": ["Fonetika", "Sintaksis", "Leksikologiya"],
+    "tarix": ["Jahon tarixi", "O‘zbekiston tarixi", "Qadimgi dunyo"]
 }
+
+def menu():
+    keyboard = [
+                  [KeyboardButton(text='📝 Testlar'),KeyboardButton(text='📈 Statistika')],
+                  [KeyboardButton(text='📲 Admin bilan bog‘lanish')]
+            ]
+    murkup = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return murkup
+
 
 def get_main_keyboard():
     builder = InlineKeyboardBuilder()
@@ -46,7 +55,7 @@ def get_main_keyboard():
             text=subject.capitalize(),
             callback_data=SubjectCallbackFactory(subject=subject).pack()
         )
-    builder.adjust(3)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -57,7 +66,7 @@ def get_subcategories_kb(subject: str):
             text=category,
             callback_data=CategoryCallbackFactory(subject=subject, category=category).pack()
         )
-    builder.button(text="⬅️ Orqaga", callback_data="back_subjects")
+    builder.button(text="⬅️ Orqaga", callback_data="subject")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -74,23 +83,43 @@ def get_start_test_keyboard(subject: str, category: str):
     return builder.as_markup()
 
 
-async def send_question(message: Message, state: FSMContext):
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+async def send_question(message, state, edit=False):
     data = await state.get_data()
-    index = data['current_question']
     questions = data['questions']
+    current_index = data.get('current_question', 0)
 
-    question_text, options = questions[index]
+    import json
+    question_text, options_json, question_id, correct_answer = questions[current_index]
+    options = json.loads(options_json) if isinstance(options_json, str) else options_json
 
-    keyboard = [KeyboardButton(text=option) for option in options]
-    keyboard = [keyboard[i:i + 2] for i in range(0, len(keyboard), 2)]
+    buttons = [
+        InlineKeyboardButton(
+            text=option,
+            callback_data=AnswerCallbackFactory(
+                index=current_index,
+                selected_option=option
+            ).pack()
+        )
+        for option in options
+    ]
+
+    buttons_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons_rows)
+
+    if edit:
+        await message.edit_text(question_text, reply_markup=keyboard)
+    else:
+        await message.answer(question_text, reply_markup=keyboard)
 
 
-    markup = ReplyKeyboardMarkup(
-        keyboard=keyboard,
-        resize_keyboard=True
-    )
 
-    await message.answer(f"{index + 1}-savol:\n\n{question_text}", reply_markup=markup)
+
+
+
 
 
 
