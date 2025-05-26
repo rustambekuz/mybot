@@ -131,9 +131,7 @@ async def show_statistics(message: Message):
     finally:
         await conn.close()
 
-    await message.answer(f"Foydalanuvchilar statistikasi:\n{telegraph_url}")
-
-
+    await message.answer(f'<a href="{telegraph_url}">Statistika natijalari 👇</a> ', parse_mode='HTML')
 
 
 @dp.callback_query(SubjectCallbackFactory.filter())

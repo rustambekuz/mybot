@@ -2,7 +2,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import Message, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
-from telegraph import Telegraph
+from aiogram.fsm.state import State, StatesGroup
 
 
 
@@ -26,7 +26,6 @@ class AnswerCallbackFactory(CallbackData, prefix="answer"):
 
 
 
-from aiogram.fsm.state import State, StatesGroup
 
 class QuizStates(StatesGroup):
     question = State()
