@@ -2,6 +2,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import Message, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
+from telegraph import Telegraph
 
 
 
@@ -86,6 +87,8 @@ def get_start_test_keyboard(subject: str, category: str):
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+import string
+
 async def send_question(message, state, edit=False):
     data = await state.get_data()
     questions = data['questions']
@@ -95,15 +98,18 @@ async def send_question(message, state, edit=False):
     question_text, options_json, question_id, correct_answer = questions[current_index]
     options = json.loads(options_json) if isinstance(options_json, str) else options_json
 
+    question_number = current_index + 1
+    full_text = f"Savol {question_number}/{len(questions)}\n\n{question_text}"
+
     buttons = [
         InlineKeyboardButton(
-            text=option,
+            text=f"{letter}) {option}",
             callback_data=AnswerCallbackFactory(
                 index=current_index,
                 selected_option=option
             ).pack()
         )
-        for option in options
+        for letter, option in zip(string.ascii_uppercase, options)
     ]
 
     buttons_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
@@ -111,14 +117,9 @@ async def send_question(message, state, edit=False):
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons_rows)
 
     if edit:
-        await message.edit_text(question_text, reply_markup=keyboard)
+        await message.edit_text(full_text, reply_markup=keyboard, parse_mode="HTML")
     else:
-        await message.answer(question_text, reply_markup=keyboard)
-
-
-
-
-
+        await message.answer(full_text, reply_markup=keyboard, parse_mode="HTML")
 
 
 

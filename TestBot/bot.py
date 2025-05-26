@@ -41,8 +41,8 @@ async def handle_test(message: Message):
 async def handle_test(message: Message):
     await message.answer(f"Assalomu alaykum, {html.bold(message.from_user.full_name)}!\n\n"
                          f"Admin bilan bog‘lanish uchun quyidagilarga murojaat qilishingiz mumkin\n"
-                         f"Telegram username: @freelancerpragrammiz\n"
-                         f"📲Telefon raqam:\n"
+                         f"<b>Telegram username:</b> @freelancerpragrammiz\n"
+                         f"<b>📲Telefon raqam:</b>\n"
                          f"{html.italic('+998 88-203-44-03')}\n"
                          f"{html.italic('+998 95-071-71-03')}\n")
     await message.delete()
@@ -73,11 +73,11 @@ async def show_statistics(message: Message):
     accuracy = (correct_answers / total_answers) * 100
 
     text = (
-        f"📊 Test natijangiz:\n\n"
-        f"Jami berilgan savollar soni: {total_answers} ta\n"
-        f"To'g'ri javoblar soni: {correct_answers} ta\n"
-        f"Noto'g'ri javoblar soni: {total_answers-correct_answers} ta\n"
-        f"Natija foizi: {accuracy:.2f}%"
+        f"📊 <b>Test natijangiz:</b>\n\n"
+        f"📝 Jami savollar: {total_answers} ta\n"
+        f"✅ To'g'ri javoblar: {correct_answers} ta\n"
+        f"❌ Noto'g'ri javoblar: {total_answers - correct_answers} ta\n"
+        f"📈 Natija foizi: {accuracy:.2f}%"
     )
 
     await message.answer(text)
@@ -191,8 +191,6 @@ async def category_selected_handler(call: CallbackQuery, callback_data: Category
         reply_markup=get_start_test_keyboard(subject, category)
     )
     await call.answer()
-
-
 
 
 @dp.message()
