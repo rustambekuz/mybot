@@ -15,7 +15,7 @@ import asyncpg
 from telegraph import Telegraph
 from TestBot.db.db_quiz import get_connection_async
 
-from inline_keyboards.keyboards import (
+from TestBot.inline_keyboards.keyboards import (
     get_main_keyboard, get_subcategories_kb, get_start_test_keyboard, menu,
     send_question, QuizStates,
     SubjectCallbackFactory, CategoryCallbackFactory, StartTestCallbackFactory, AnswerCallbackFactory
