@@ -3,9 +3,8 @@
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/QuizBot/db_users.py" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/QuizBot/dbquiz.py" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestBot/bot.py" dialect="GenericSQL" />
-    <file url="file://$PROJECT_DIR$/TestBot/bot2.py" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/TestBot/db/db_quiz.py" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/TestBot/main.py" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/db.py" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/multilanguage_bot/utils/db/postgres_db.py" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/register.py" dialect="GenericSQL" />

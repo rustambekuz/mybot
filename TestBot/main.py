@@ -24,9 +24,16 @@ from inline_keyboards.keyboards import (
 load_dotenv()
 
 TOKEN = getenv("BOT_TOKEN")
+ADMIN_ID= getenv("ADMIN_ID")
 
+# bot= Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
+async def on_startup(bot: Bot):
+    await bot.send_message(ADMIN_ID, "✅ Bot ishga tushdi.")
+
+async def on_shutdown(bot: Bot):
+    await bot.send_message(ADMIN_ID, "❌ Bot o'chdi.")
 
 
 
@@ -250,8 +257,11 @@ async def default_message_handler(message: Message):
     await message.delete()
 
 
+
 async def main() -> None:
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
     await dp.start_polling(bot)
 
 
