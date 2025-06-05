@@ -83,7 +83,6 @@ def get_start_test_keyboard(subject: str, category: str):
     return builder.as_markup()
 
 
-
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 import string
