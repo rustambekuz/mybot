@@ -29,21 +29,21 @@ def get_connection():
         dbname="quiztestbot_db",
         user="quiztestbot_db_user",
         password="j1KFFJreLjozsMis9GmqilgqbsxU0IaF",
-        host="dpg-d10m773e5dus73afg9b0-a",
+        host="dpg-d10m773e5dus73afg9b0-a.oregon-postgres.render.com",
         port="5432"
     )
 
 
 
 import asyncpg
-
 async def get_connection_async():
     return await asyncpg.connect(
         user='quiztestbot_db_user',
         password='j1KFFJreLjozsMis9GmqilgqbsxU0IaF',
         database='quiztestbot_db',
-        host='dpg-d10m773e5dus73afg9b0-a',
+        host='dpg-d10m773e5dus73afg9b0-a.oregon-postgres.render.com',
         port=5432
     )
+
 
 
