@@ -26,7 +26,6 @@ load_dotenv()
 TOKEN = getenv("BOT_TOKEN")
 ADMIN_ID= getenv("ADMIN_ID")
 
-# bot= Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
 async def on_startup(bot: Bot):
